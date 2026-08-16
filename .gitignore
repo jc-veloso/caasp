@@ -1,0 +1,15 @@
+# Local backups from manual editing sessions (superseded by git history)
+*.bak_*
+
+# TDS-generated binary deployment patches - opaque, regenerated from .prw sources
+*.ptm
+
+# Manual folder snapshots (superseded by git history)
+api/src/refactoring.zip
+
+# Claude Code local permission overrides (user-specific)
+.claude/settings.local.json
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db

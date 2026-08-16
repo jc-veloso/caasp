@@ -1,0 +1,198 @@
+Lucas Lana - CAASP
+0 minutos 4 segundos0:04
+Lucas Lana - CAASP 0 minutos 4 segundos
+Tá lá ou não?
+Lucas Lana - CAASP 0 minutos 8 segundos
+Quer fazer essa carga? A gente pode fazer também.
+Lucas Lana - CAASP 0 minutos 11 segundos
+Be assim, o meu is.
+A
+
+Alison
+0 minutos 12 segundos0:12
+Alison 0 minutos 12 segundos
+É porque assim
+LC
+
+Lucas Lana - CAASP
+0 minutos 14 segundos0:14
+Lucas Lana - CAASP 0 minutos 14 segundos
+Pode falar?
+A
+
+Alison
+0 minutos 14 segundos0:14
+Alison 0 minutos 14 segundos
+Acho que é porque assim é o que eu percebi, independente do o produto, estando ou não a lentidão, ela é bem significativa. Se não tem, não tem nem o que falar. Aí o negócio fica, é.
+LC
+
+Lucas Lana - CAASP
+0 minutos 24 segundos0:24
+Lucas Lana - CAASP 0 minutos 24 segundos
+Yes.
+A
+
+Alison
+0 minutos 30 segundos0:30
+Alison 0 minutos 30 segundos
+Inutilizável, sim, não tem. Agora, quando tem também, ele é pesado da mesma forma. Tudo bem, a gente pode dar cargas, deixar tudo lá, assim como a gente deu nas outras vezes de produto, mas vai existir essa situação mesmo. Produtos de farmácia, livraria, livraria, por exemplo, ele muda edição.
+Alison 0 minutos 45 segundos
+a todo dia sabe tem cadastro direto mesmo então o cadastro de produtos de livraria de farmácia é bem é bem comum chega uma nota do fornecedor e cadastro Claro pois pode deixar o cadastro lá mas assim o que eu tava reportando de teste de lentidão é já com a
+
+Mauricio Souza
+0 minutos 47 segundos0:47
+Mauricio Souza 0 minutos 47 segundos
+Mhm.
+A
+Alison
+25 minutos 48 segundos25:48
+Alison 25 minutos 48 segundos
+Okay.
+
+Mauricio Souza
+25 minutos 49 segundos25:49
+Mauricio Souza 25 minutos 49 segundos
+Deixa demorar, mas como a gente falou, cara, até pra venda tá tendo atualização e insert.
+Mauricio Souza 25 minutos 56 segundos
+É bom ajustar.
+A
+Alison
+25 minutos 56 segundos25:56
+Alison 25 minutos 56 segundos
+Entendi.
+Alison 25 minutos 59 segundos
+Tá legal, se semana que vem a gente consegue começar a testar alguma coisa, já é um bom sinal, né?
+
+José Carlos Veloso Júnior
+26 minutos 3 segundos26:03
+José Carlos Veloso Júnior 26 minutos 3 segundos
+Sim.
+
+Mauricio Souza
+26 minutos 5 segundos26:05
+Mauricio Souza 26 minutos 5 segundos
+A nossa ideia é começar pela NFC-e, porque imagino que é mais tranquilo, costuma ser mais suave, costuma ser Arthur Alison aí Lucas, NFC-e é o mais tranquilo e também tem mais volume.
+LC
+Lucas Lana - CAASP
+26 minutos 15 segundos26:15
+Lucas Lana - CAASP 26 minutos 15 segundos
+Sim.
+AF
+Arthur Ferreira
+26 minutos 18 segundos26:18
+Arthur Ferreira 26 minutos 18 segundos
+É o maior volume em quantidade de notas com menor quantidade de produtos por nota. Ele é uma massa muito interessante para o teste. Cadastra muito produto mesmo.
+LC
+Lucas Lana - CAASP
+26 minutos 18 segundos26:18
+Lucas Lana - CAASP 26 minutos 18 segundos
+Também.
+A
+Alison
+26 minutos 23 segundos26:23
+Alison 26 minutos 23 segundos
+Yeah.
+
+Mauricio Souza
+26 minutos 27 segundos26:27
+Mauricio Souza 26 minutos 27 segundos
+Boa.
+Mauricio Souza 26 minutos 29 segundos
+Entendi, legal.
+Mauricio Souza 26 minutos 32 segundos
+Não vai ser bom.
+Mauricio Souza 26 minutos 33 segundos
+É, vamos matar isso aí, tirar o NFC do caminho e aí já valida o modelo, aí a gente já vai para o NF-e.
+Mauricio Souza 26 minutos 41 segundos
+E vai usar a mesma estrutura para fazer NF quando é compra, quando for devolução, transferência, as exceções, ali está tudo certo. Daí também a regra, as regras de validação dentro do a gente vai manter, então tudo aquilo que já foi acordado a gente não vai usar, não vai manter, é mais o processamento mesmo, é mais a como chamar essas funções.
+
+José Carlos Veloso Júnior
+26 minutos 44 segundos26:44
+José Carlos Veloso Júnior 26 minutos 44 segundos
+Mhm.
+
+Mauricio Souza
+27 minutos 1 segundo27:01
+Mauricio Souza 27 minutos 1 segundo
+e já foram validados.
+A
+Alison
+27 minutos 1 segundo27:01
+Alison 27 minutos 1 segundo
+Okay.
+Alison 27 minutos 4 segundos
+Believe.
+LC
+Lucas Lana - CAASP
+27 minutos 5 segundos27:05
+Lucas Lana - CAASP 27 minutos 5 segundos
+Fechou.
+
+Mauricio Souza
+27 minutos 7 segundos27:07
+Mauricio Souza 27 minutos 7 segundos
+Maravilha, estamos no finalzinho, né? A pena que tá no finalzinho, parece que tá mais enroscado aí, mas vamos acelerar a semana que vem para soltar essas integrações e assim que a gente sai de alguma coisa, normalmente o Arthur faz mais contato com vocês, deixa o Arthur, conhece bastante.
+A
+Alison
+27 minutos 14 segundos27:14
+Alison 27 minutos 14 segundos
+There you go.
+Alison 27 minutos 21 segundos
+Sim.
+
+Mauricio Souza
+27 minutos 23 segundos27:23
+Mauricio Souza 27 minutos 23 segundos
+E se você tiver alguma dúvida, precisar de alguma coisa também pode contar com a gente aí. Eu já queria ter dado essa notícia sexta-feira passada, mas aí, mas agora vai dar tempo.
+A
+Alison
+27 minutos 24 segundos27:24
+Alison 27 minutos 24 segundos
+Okay.
+
+José Carlos Veloso Júnior
+27 minutos 27 segundos27:27
+José Carlos Veloso Júnior 27 minutos 27 segundos
+Sim.
+A
+Alison
+27 minutos 32 segundos27:32
+Alison 27 minutos 32 segundos
+Beleza então obrigado aí pelo retorno aí semana que vem a gente vai caminhando aí
+
+José Carlos Veloso Júnior
+27 minutos 35 segundos27:35
+José Carlos Veloso Júnior 27 minutos 35 segundos
+Okay.
+
+Mauricio Souza
+27 minutos 38 segundos27:38
+Mauricio Souza 27 minutos 38 segundos
+Excelente, obrigado aí, um ótimo fim de semana.
+
+José Carlos Veloso Júnior
+27 minutos 39 segundos27:39
+José Carlos Veloso Júnior 27 minutos 39 segundos
+Simone.
+A
+Alison
+27 minutos 40 segundos27:40
+Alison 27 minutos 40 segundos
+Valeu, pessoal. Bye bye.
+LC
+Lucas Lana - CAASP
+27 minutos 41 segundos27:41
+Lucas Lana - CAASP 27 minutos 41 segundos
+Obrigado, viu? Tchau, tchau.
+
+José Carlos Veloso Júnior
+27 minutos 41 segundos27:41
+José Carlos Veloso Júnior 27 minutos 41 segundos
+Obrigado, pessoal. Até mais.
+RB
+Rafael Barbosa
+27 minutos 42 segundos27:42
+Rafael Barbosa 27 minutos 42 segundos
+Obrigado, tchau tchau. Até mais, tchau tchau.
+
+Mauricio Souza parou a transcrição

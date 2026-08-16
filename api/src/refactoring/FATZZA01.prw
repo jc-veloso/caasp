@@ -158,7 +158,12 @@ Static Function ZZA_MotorSaida(jJson)
                 aRetTransf := U_FATPI01NF(aPrd, oHead, cCnpjEmit, AllTrim(U_PI_STR_X(oHead,'_NF')), AllTrim(U_PI_STR_X(oHead,'_SER')), aEmpDest)
                 If !aRetTransf[1]
                     U_PI_ROLLBACK_NF(AllTrim(U_PI_STR_X(oHead,'_NF')), AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')))
-                    Return {.F., "ROLLBACK_CONVENIOS: " + cValToChar(aRetTransf[2]) + " | Saida (SF2) na origem foi ESTORNADA."}
+                    // [FIX-CALLBACK-ERRO] Jose Carlos - Artiq - 08/2026
+                    // cSub adicionado - faltava aqui (unico Return {.F.,...}
+                    // desta funcao sem o 3o elemento), fazia o callback de
+                    // erro sair com cod_Subseccao=0 mesmo com o valor ja
+                    // disponivel na variavel local.
+                    Return {.F., "ROLLBACK_CONVENIOS: " + cValToChar(aRetTransf[2]) + " | Saida (SF2) na origem foi ESTORNADA.", cSub}
                 EndIf
             EndIf
         EndIf

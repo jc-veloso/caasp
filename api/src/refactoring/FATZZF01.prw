@@ -7,8 +7,8 @@
 // do primeiro RpcSetEnv (erro 'variable does not exist CFILANT'). Hardcode
 // e o padrao correto nesse bootstrap; isolado em #Define para ficar facil
 // de achar/trocar se o ambiente mudar.
-STATIC CEMPPAD "01"
-STATIC CFILPAD "01001"
+STATIC CEMPPAD := "01"
+STATIC CFILPAD := "01001"
 
 /*
 +----------------------------------------------------------------------------+
@@ -109,11 +109,15 @@ User Function FATZZF01()
 
                 // [FIX-CALLBACK-PRODUTO] Jose Carlos - Artiq - 08/2026
                 // Pedido do Arthur: mesmo endpoint oficial de Notas Fiscais na
-                // liberacao de produto, nao so no processamento final. Recibo (ZZE)
-                // fica no mecanismo antigo - callback oficial de Recibo ainda nao
-                // existe.
+                // liberacao de produto, nao so no processamento final.
+                // [REV-ZZCALLBK-UNIFICADO] Jose Carlos - Artiq - 08/2026
+                // Recibo (ZZE) agora usa o mesmo callback unificado das Notas
+                // Fiscais (ver ZZCALLBK/CBackIpaas) - so a mensagem customizada
+                // continua distinta por dominio. cTab corrigido de "ZZF" pra
+                // "ZZE" (a fila "ZZF" nunca foi um dominio de callback de
+                // verdade - era so um resquicio do dispatch antigo).
                 If cTabPai == "ZZE"
-                    U_ZZCALLBK("ZZF", cChvRef, "ProdutosCadastrados", "Todos os produtos cadastrados. Nota liberada para processamento.")
+                    U_ZZCALLBK("ZZE", cChvRef, "", .T., "", "", "", "Todos os produtos cadastrados. Nota liberada para processamento.")
                 Else
                     U_ZZCALLBK(cTabPai, cChvRef, "", .T., "", "", "", "Produtos cadastrados. Nota em processamento.")
                 EndIf
@@ -139,11 +143,9 @@ User Function FATZZF01()
                 Otherwise              ; cTabPai := "ZZA"
             EndCase
 
-            If cTabPai == "ZZE"
-                U_ZZCALLBK("ZZE", cChvRef, "Falha", "Produto pendente nao cadastrado: " + cErrMsg)
-            Else
-                U_ZZCALLBK(cTabPai, cChvRef, "", .F., "", "", "Produto pendente nao cadastrado: " + cErrMsg)
-            EndIf
+            // [REV-ZZCALLBK-UNIFICADO] Mensagem ja era identica nos dois
+            // ramos - colapsado numa chamada so, sem Do Case.
+            U_ZZCALLBK(cTabPai, cChvRef, "", .F., "", "", "Produto pendente nao cadastrado: " + cErrMsg)
         EndIf
 
         (cAliZZF)->(DbSkip())
@@ -188,9 +190,8 @@ Static Function ZZF_CADPRD(cCodLeg)
     //      (reparar: "int_ItemsPorPagina" na query, mas a resposta JSON
     //      vem com "int_ItensPorPagina" - grafias diferentes, mantido
     //      literal do que foi testado, nao "corrigido").
-    //   3) Token Bearer vem de MV_XCPTOK (parametro SX6, mesmo padrao do
-    //      MV_XIPURL usado no callback do Recibo) - precisa ser cadastrado
-    //      no ambiente antes deste Job rodar. O token de teste era um JWT
+    //   3) Token Bearer vem de MV_XCPTOK (parametro SX6) - precisa ser
+    //      cadastrado no ambiente antes deste Job rodar. O token de teste era um JWT
     //      com exp de 1h nos claims, mas continuou validando ~8h depois -
     //      aparentemente o exp nao e checado pelo servidor na pratica,
     //      mas isso pode mudar; se a API comecar a devolver 401, e sinal
@@ -206,7 +207,7 @@ Static Function ZZF_CADPRD(cCodLeg)
     Local aRes      := {}
     Local aHeader   := {}
     Local cUrl      := "https://api.caasp.org.br/integracoes/totvs/produtos/listar"
-    Local cToken    := AllTrim(SuperGetMv("MV_XCPTOK", .F., ""))
+    Local cToken    := AllTrim(SuperGetMv("MV_XCPTOK", .F., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1bmlxdWVfbmFtZSI6IlRPVFZTIiwianRpIjoiOTQ5ZjU1ZDY5YjQ0NDU5YWFmODBjMTAzOWQ1ODVlM2IiLCJuYmYiOjE3NjU4MTk5NDQsImV4cCI6MTc2NTgyMzU0NCwiaWF0IjoxNzY1ODE5OTQ0LCJpc3MiOiJodHRwczovL2FwaS5jYWFzcC5vcmcuYnIiLCJhdWQiOiJodHRwczovL2FwaS5jYWFzcC5vcmcuYnIifQ.22h-Y1zND9xcZFrWocakbDiItreh367rRYiTPqOIhNA"))
     Local cBody     := ""
     Local cHeadRet  := ""
     Local jResp     := Nil
@@ -463,71 +464,80 @@ Return lRet
 
 // ==========================================================================
 // ZZCALLBK roteador
-// [REV-ZZCALLBK-ARTHUR] Jose Carlos - Artiq - 08/2026
-// Reescrito pra bater com a especificacao real do Arthur (doc "Retorno de
-// integracao de notas CAASP"). So Notas Fiscais (ZZA/ZZB/ZZC/ZZD, que
-// incluem NFCe � confirmado que usa o mesmo retorno de Nota Fiscal, ~95%
-// de certeza, a confirmar 100% com o Arthur) foi implementado.
-// ZZE (Recibo) mantido com o comportamento ANTIGO, intacto � vai ganhar
-// tratamento proprio quando chegarem nesse ponto (provavelmente com
-// funcoes especificas, conforme combinado).
-// Assinaturas diferentes por tabela � cTab decide qual:
-//   ZZA/ZZB/ZZC/ZZD: ZZCALLBK(cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento, cMsgErro, cMsgCustom)
-//   ZZE:             ZZCALLBK(cTab, cChave, cResultado, cMensagem)   -- formato antigo
-// [FIX-CALLBACK-PRODUTO] cMsgCustom (8o, opcional) - ver CBackNotaF abaixo.
+// [REV-ZZCALLBK-UNIFICADO] Jose Carlos - Artiq - 08/2026
+// Notas Fiscais (ZZ9/ZZA/ZZB/ZZC/ZZD, inclui NFCe) e Recibo (ZZE) agora
+// compartilham o MESMO formato de payload (cod_Subseccao/des_Processamento/
+// flg_Processamento), conforme os dois docs do Arthur ("Notas Fiscais (01)"
+// e "Recibos de Venda (08)") - so mudam a URL do endpoint iPaaS e o nome do
+// campo-chave (cod_ChaveNFe pra Nota Fiscal, num_PedidoReciboVenda pra
+// Recibo). Antes o Recibo usava um mecanismo generico a parte (MV_XIPURL +
+// /protheus/callback, formato tabela/chave/resultado/mensagem) - substituido
+// pela mesma funcao CBackIpaas usada pelas Notas Fiscais. Assinatura unica
+// pra todos os dominios:
+//   ZZCALLBK(cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento, cMsgErro, cMsgCustom)
+// cMsgCustom (8o, opcional) sobrescreve a montagem automatica de
+// des_Processamento/flg_Processamento - usado na liberacao de produto
+// pendente (mensagem "em processamento", ver FATZZF01 mais acima) e pelo
+// Recibo (que ja recebe a mensagem pronta de U_FATPI08NF, formato "Nota
+// Varejo Processada: [filial] - [documento]" - nao ha cFilNota/cDocumento
+// separados nesse caminho).
 // ==========================================================================
-User Function ZZCALLBK(cTab, cChave, p3, p4, p5, p6, p7, p8)
-    If cTab == "ZZE" //.Or. cTab == "ZZF"
-        CBackRecib(cTab, cChave, p3, p4)
-    Else
-        CBackNotaF({cTab, cChave, p3, p4, p5, p6, p7, p8})
-    EndIf
+User Function ZZCALLBK(cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento, cMsgErro, cMsgCustom)
+    Local cUrl        := ""
+    Local cCampoChave := ""
+    Local cMsgPad     := ""
+
+    Do Case
+        Case cTab == "ZZE"
+            cUrl        := "https://api-ipaas.totvs.app/ipaas/api/v1/integrations/2246e04c-65ec-4b83-b298-f8ec1643420c/api-key/67e28815-d2ff-4501-9f2f-e99271e6a3d7"
+            cCampoChave := "num_PedidoReciboVenda"
+            cMsgPad     := "Nota Varejo Processada"
+        Otherwise
+            cUrl        := "https://api-ipaas.totvs.app/ipaas/api/v1/integrations/9aa6e2ae-1ece-4907-ba77-61c33d07bd79/api-key/6df64a64-4fc2-4b31-9c36-0958f06fcf33"
+            cCampoChave := "cod_ChaveNFe"
+            cMsgPad     := "Nota"
+    EndCase
+
+    CBackIpaas(cUrl, cCampoChave, cMsgPad, cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento, cMsgErro, cMsgCustom)
 Return()
 
 // ==========================================================================
-// CBackNotaF � Notas Fiscais (ZZA/ZZB/ZZC/ZZD, inclui NFCe)
-// Payload e URL conforme doc "Retorno de integracao de notas CAASP" do Arthur.
-// des_Processamento sucesso: "Nota: [filial] - [documento]"
-//   documento = numero do motor (F2_DOC/F1_DOC) para NFe, L1_NUM para NFCe
-// des_Processamento erro: mensagem de erro tratada
-// flg_Processamento: "S" ou "E"
-// [FIX-CALLBACK-PRODUTO] Jose Carlos - Artiq - 08/2026
-// Assinatura trocada de parametros posicionais para array (aDados) - o
-// pedido do Arthur (chamar este mesmo endpoint oficial tambem na liberacao
-// de produto pendente, nao so no processamento final) precisou de um 8o
-// elemento opcional (mensagem customizada) que sobrescreve a montagem
-// automatica de des_Processamento/flg_Processamento (tanto sucesso quanto
-// erro). Array em vez de mais um parametro posicional pra nao estourar a
-// lista de argumentos ja longa.
+// CBackIpaas � envia o callback de processamento pro iPaaS. Unifica o que
+// antes eram CBackNotaF (Notas Fiscais) e CBackRecib (Recibo, mecanismo
+// generico antigo via MV_XIPURL) - ver ZZCALLBK acima pra roteamento por
+// dominio (URL/campo-chave/prefixo de mensagem).
+// Payload conforme docs do Arthur ("Notas Fiscais (01)" e "Recibos de Venda
+// (08)"): { <cCampoChave>: cChave, cod_Subseccao: n, des_Processamento: "...",
+// flg_Processamento: "S"/"E" }
+// des_Processamento sucesso: "<cMsgPad>: [filial] - [documento]"
+//   documento = numero do motor (F2_DOC/F1_DOC) para NFe, L1_NUM para NFCe;
+//   pro Recibo, U_FATPI08NF ja devolve a mensagem pronta nesse formato -
+//   chega aqui via cMsgCustom, nao via cFilNota/cDocumento separados.
+// des_Processamento erro: mensagem de erro tratada (cMsgErro)
+// flg_Processamento: Protheus so envia "S" ou "E" aqui - os valores "P"
+//   (produto pendente) e "A" (nota em andamento) do doc do Arthur sao
+//   setados do lado do iPaaS, no armazenamento do proprio iPaaS.
 // ==========================================================================
-Static Function CBackNotaF(aDados)
-    Local aHeader     := {}
-    Local cHeadRet    := ""
-    Local jPayload    := JsonObject():New()
-    Local cTab        := aDados[1]
-    Local cChave      := aDados[2]
-    Local cSubSeccao  := aDados[3]
-    Local lSucesso    := aDados[4]
-    Local cFilNota    := aDados[5]
-    Local cDocumento  := aDados[6]
-    Local cMsgErro    := aDados[7]
-    Local cMsgCustom  := IIF(Len(aDados) >= 8, aDados[8], "")
-    Local cUrl        := "https://api-ipaas.totvs.app/ipaas/api/v1/integrations/9aa6e2ae-1ece-4907-ba77-61c33d07bd79/api-key/6df64a64-4fc2-4b31-9c36-0958f06fcf33"
+Static Function CBackIpaas(cUrl, cCampoChave, cMsgPad, cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento, cMsgErro, cMsgCustom)
+    Local aHeader  := {}
+    Local cHeadRet := ""
+    Local jPayload := JsonObject():New()
 
-    If cSubSeccao == Nil ; cSubSeccao := "" ; EndIf
-    If lSucesso   == Nil ; lSucesso   := .F. ; EndIf
-    If cFilNota   == Nil ; cFilNota   := "" ; EndIf
-    If cDocumento == Nil ; cDocumento := "" ; EndIf
-    If cMsgErro   == Nil ; cMsgErro   := "" ; EndIf
+    Default cSubSeccao := ""
+    Default lSucesso   := .F.
+    Default cFilNota   := ""
+    Default cDocumento := ""
+    Default cMsgErro   := ""
+    Default cMsgCustom := ""
 
-    jPayload['cod_ChaveNFe']  := cChave
+    jPayload[cCampoChave]     := cChave
     jPayload['cod_Subseccao'] := Val(cSubSeccao)
 
     If !Empty(cMsgCustom)
         jPayload['des_Processamento'] := cMsgCustom
         jPayload['flg_Processamento'] := IIF(lSucesso, "S", "E")
     ElseIf lSucesso
-        jPayload['des_Processamento'] := "Nota: " + AllTrim(cFilNota) + " - " + AllTrim(cDocumento)
+        jPayload['des_Processamento'] := cMsgPad + ": " + AllTrim(cFilNota) + " - " + AllTrim(cDocumento)
         jPayload['flg_Processamento'] := "S"
     Else
         jPayload['des_Processamento'] := cMsgErro
@@ -538,48 +548,9 @@ Static Function CBackNotaF(aDados)
     HttpPost(cUrl, "", jPayload:toJSON(), 30, aHeader, @cHeadRet)
 
     If "200" $ cHeadRet .Or. "201" $ cHeadRet .Or. "204" $ cHeadRet
-        ConOut("[ZZCALLBK-NF] OK: " + cTab + " | " + cChave + " | " + jPayload['flg_Processamento'])
+        ConOut("[ZZCALLBK] OK: " + cTab + " | " + cChave + " | " + jPayload['flg_Processamento'])
     Else
-        ConOut("[ZZCALLBK-NF] AVISO HTTP - Header resposta: " + cHeadRet + " | " + cChave)
-    EndIf
-
-    FreeObj(jPayload)
-Return
-
-// ==========================================================================
-// CBackRecib � Recibo de Venda (ZZE). COMPORTAMENTO ANTIGO, intacto.
-// [PENDENTE] O documento do Arthur ja especifica o formato real de Recibo
-// (URL propria, payload com num_PedidoReciboVenda) mas ficou combinado de
-// tratar isso quando chegarmos nesse ponto � motor ainda nao gera o numero
-// de pedido/ODT necessario. Por ora, mantido o mecanismo generico anterior
-// (MV_XIPURL + /protheus/callback) para nao regredir o que ja funcionava.
-// ==========================================================================
-Static Function CBackRecib(cTab, cChave, cResultado, cMensagem)
-    Local aHeader  := {}
-    Local cHeadRet := ""
-    Local jPayload := JsonObject():New()
-    Local cUrl     := SuperGetMv("MV_XIPURL", .F., "")
-
-    If Empty(cUrl)
-        ConOut("[ZZCALLBK-Recibo] MV_XIPURL nao configurado � callback nao enviado.")
-        FreeObj(jPayload)
-        Return
-    EndIf
-
-    jPayload['tabela']    := cTab
-    jPayload['chave']     := cChave
-    jPayload['resultado'] := cResultado
-    jPayload['mensagem']  := cMensagem
-    jPayload['filial']    := xFilial("SX6")
-    jPayload['dtHora']    := DToS(Date()) + " " + Time()
-
-    aAdd(aHeader, "Content-Type: application/json")
-    HttpPost(cUrl + "/protheus/callback", "", jPayload:toJSON(), 30, aHeader, @cHeadRet)
-
-    If "200" $ cHeadRet .Or. "201" $ cHeadRet .Or. "204" $ cHeadRet
-        ConOut("[ZZCALLBK-Recibo] OK: " + cTab + " | " + cChave + " | " + cResultado)
-    Else
-        ConOut("[ZZCALLBK-Recibo] AVISO HTTP - Header resposta: " + cHeadRet + " | " + cChave)
+        ConOut("[ZZCALLBK] AVISO HTTP - Header resposta: " + cHeadRet + " | " + cChave)
     EndIf
 
     FreeObj(jPayload)

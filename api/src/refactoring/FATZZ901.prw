@@ -7,8 +7,8 @@
 // do primeiro RpcSetEnv (erro 'variable does not exist CFILANT'). Hardcode
 // e o padrao correto nesse bootstrap; isolado em #Define para ficar facil
 // de achar/trocar se o ambiente mudar. Padrao copiado do FATZZA01.prw.
-Static CEMPPAD := "01"
-Static CFILPAD := "01001"
+#DEFINE CEMPPAD "01"
+#DEFINE CFILPAD "01001"
 
 /*
 +----------------------------------------------------------------------------+
@@ -42,6 +42,7 @@ User Function FATZZ901()
     Local cFilOri    := ""
     Local nRecno     := 0
     Local cErrMsg    := ""
+    Local cSub       := ""
     Local cTabPai    := ""
     Local lOk        := .F.
     Local lDup       := .F.
@@ -85,6 +86,7 @@ User Function FATZZ901()
         cFilOri := AllTrim((cAliZZ9)->ZZ9_FILIAL)
         nRecno  := (cAliZZ9)->RECNO
         cErrMsg := ""
+        cSub    := ""
         cTabPai := ""
         lOk     := .F.
         lDup    := .F.
@@ -111,6 +113,7 @@ User Function FATZZ901()
                 lDup    := IIF(Len(aRet) >= 4, aRet[4], .F.)
             Else
                 cErrMsg := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "Erro desconhecido na classificacao")
+                cSub    := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
             EndIf
         Else
             cErrMsg := "JSON invalido na fila ZZ9. COD: " + cCod
@@ -131,6 +134,14 @@ User Function FATZZ901()
             ConOut("[FATZZ901] OK: " + cCod + " | Destino: " + cTabPai + IIF(lDup, " (nota ja existia, nao duplicou)", ""))
         Else
             U_UPDSTAT("ZZ9", cCod, "E", cErrMsg)
+            // [FIX-CALLBACK-ERRO] Jose Carlos - Artiq - 08/2026
+            // Antes nenhum erro de classificacao chegava ao iPaaS - a nota
+            // ficava presa na ZZ9 com STATUS='E' pra sempre, sem nunca ser
+            // roteada pra ZZA/ZZB/ZZC (onde o callback de erro normalmente
+            // dispara). "ZZ9" como cTab cai no Otherwise de ZZCALLBK (dominio
+            // Nota Fiscal - cod_ChaveNFe), igual ja acontecia na liberacao de
+            // produto pendente (FATZZF01.prw) pra notas ainda nao classificadas.
+            U_ZZCALLBK("ZZ9", cChvNFe, cSub, .F., "", "", cErrMsg)
             nErr++
             ConOut("[FATZZ901] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
@@ -156,14 +167,16 @@ Return
 //   lOk == .T.  -> cTabPai = "ZZA"/"ZZB"/"ZZC" (pra onde foi/seria roteada),
 //                  lJaProcessada = .T. se a nota ja existia em SF2/SF1 (a
 //                  gravacao final em ZZA/ZZB/ZZC nao roda de novo nesse caso)
-//   lOk == .F.  -> cErrMsg = motivo da falha
+//   lOk == .F.  -> cErrMsg = motivo da falha, cSub = cod_Subseccao (3o
+//                  elemento, quando ja disponivel - ver [FIX-CALLBACK-ERRO]
+//                  no loop principal, FATZZ901())
 // ==========================================================================
 Static Function ZZ901_Classifica(jJson)
     Local aInv         := jJson['notas']
     Local oHead        := Nil
     Local aPrd         := {}
     Local aEmp         := {}
-    Local aRet         := {}
+    Local cSub         := ""
     Local cCnpj        := ""
     Local cNF          := ""
     Local cSer         := ""
@@ -192,7 +205,6 @@ Static Function ZZ901_Classifica(jJson)
     Local cCnpjEmit    := ""
     Local cCnpjDest    := ""
     Local cUsuario     := ""
-    Local cCn
     Local lCest
     Local lNcm
     Local cModDoc      := ""
@@ -205,6 +217,11 @@ Static Function ZZ901_Classifica(jJson)
     cModDoc := U_PI_STR_X(oHead, 'cod_Mod', 'modelo')
     aPrd    := oHead['itens']
     cNatOp  := Upper(AllTrim(U_PI_STR_X(oHead, 'des_NatOp')))
+    // [FIX-CALLBACK-ERRO] Jose Carlos - Artiq - 08/2026
+    // cod_Subseccao extraido cedo (igual os outros motores ja fazem) pra
+    // alimentar o callback de erro que o loop principal (FATZZ901()) passou
+    // a disparar - antes nenhum erro de classificacao chegava ao iPaaS.
+    cSub    := cValToChar(U_PI_VAL_X(oHead, 'cod_Subseccao'))
 
     If ValType(aPrd) == "A" .And. Len(aPrd) > 0
         cCheckCFOP := Upper(U_PI_STR_X(aPrd[1], 'cod_ProdutoCFOP', 'cfop'))
@@ -222,7 +239,7 @@ Static Function ZZ901_Classifica(jJson)
     aEmp := U_PI_FILIAL_X(cCnpj)
 
     If Len(aEmp) < 2
-        Return {.F., "Filial nao encontrada para CNPJ: " + AllTrim(cCnpj)}
+        Return {.F., "Filial nao encontrada para CNPJ: " + AllTrim(cCnpj), cSub}
     EndIf
 
     If aEmp[1] != cEmpAnt .Or. aEmp[2] != cFilAnt
@@ -321,14 +338,14 @@ Static Function ZZ901_Classifica(jJson)
     ENDIF
 
     If Empty(cCod)
-        Return {.F., "Destinatario nao localizado. Doc: " + cKeyDest}
+        Return {.F., "Destinatario nao localizado. Doc: " + cKeyDest, cSub}
     Endif
 
     // [REV2-EXTRACAO-NFCE] Validacao de emitente em SA2 - sempre aplicavel (NFCe nunca chega aqui)
     SA2->(DbSetOrder(3))
     If !SA2->(DbSeek(xFilial("SA2") + cCnpjEmit))
         SA2->(DbSetOrder(1))
-        Return {.F., "Emitente nao esta cadastrado como fornecedor na filial destino. CNPJ: " + cCnpjEmit}
+        Return {.F., "Emitente nao esta cadastrado como fornecedor na filial destino. CNPJ: " + cCnpjEmit, cSub}
     EndIf
     SA2->(DbSetOrder(1))
 
@@ -422,12 +439,12 @@ Static Function ZZ901_Classifica(jJson)
                     SB1->(MsUnlock())
                 Endif
             else
-                Return {.F., "NCM e/ou CEST nao cadastrado. " + IIF(!Empty(aPrd[nI]['des_ProdutoNCM']),aPrd[nI]['des_ProdutoNCM'],'Nil') + '/' + IIF(!Empty(aPrd[nI]['des_ProdutoCEST']),aPrd[nI]['des_ProdutoCEST'],'Nil')}
+                Return {.F., "NCM e/ou CEST nao cadastrado. " + IIF(!Empty(aPrd[nI]['des_ProdutoNCM']),aPrd[nI]['des_ProdutoNCM'],'Nil') + '/' + IIF(!Empty(aPrd[nI]['des_ProdutoCEST']),aPrd[nI]['des_ProdutoCEST'],'Nil'), cSub}
             EndIf
         EndIf
 
         If Empty(cProdInt)
-            Return {.F., "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg}
+            Return {.F., "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg, cSub}
         EndIf
 
         U_PI_FIXPROD(cProdInt, aPrd[nI])
@@ -468,7 +485,7 @@ Static Function ZZ901_Classifica(jJson)
         EndIf
 
         If Empty(AllTrim(aPrd[nI]['_TES_CACHE'])) .OR. !SF4->(DbSeek(xFilial("SF4") + AllTrim(aPrd[nI]['_TES_CACHE'])))
-            Return {.F., "TES nao localizado no cadastro (SF4) da filial atual para o CFOP " + AllTrim(aPrd[nI]['cod_ProdutoCFOP']) + ". Verifique as configuracoes fiscais."}
+            Return {.F., "TES nao localizado no cadastro (SF4) da filial atual para o CFOP " + AllTrim(aPrd[nI]['cod_ProdutoCFOP']) + ". Verifique as configuracoes fiscais.", cSub}
         EndIf
 
         If cOper == "D"
@@ -503,7 +520,7 @@ Static Function ZZ901_Classifica(jJson)
     Do Case
         Case cOper == "D"
             If !U_ZZX_Gravar("ZZB", "NFD", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON())
-                Return {.F., "Falha ao gravar na fila ZZB."}
+                Return {.F., "Falha ao gravar na fila ZZB.", cSub}
             EndIf
 
         Case cOper == "S"
@@ -514,17 +531,17 @@ Static Function ZZ901_Classifica(jJson)
             MpSysOpenQuery(cQryAux, cAliAux)
             If (cAliAux)->(Eof())
                 (cAliAux)->(DbCloseArea())
-                Return {.F., "Serie '" + AllTrim(cSer) + "' nao cadastrada na Tabela 01 (SX5) da filial " + xFilial("SX5") + "."}
+                Return {.F., "Serie '" + AllTrim(cSer) + "' nao cadastrada na Tabela 01 (SX5) da filial " + xFilial("SX5") + ".", cSub}
             EndIf
             (cAliAux)->(DbCloseArea())
 
             If !U_ZZX_Gravar("ZZA", "NFS", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "TRANSF", IIF(lIsTransf, "S", "N"))
-                Return {.F., "Falha ao gravar na fila ZZA."}
+                Return {.F., "Falha ao gravar na fila ZZA.", cSub}
             EndIf
 
         Otherwise
             If !U_ZZX_Gravar("ZZC", "NFE", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON())
-                Return {.F., "Falha ao gravar na fila ZZC."}
+                Return {.F., "Falha ao gravar na fila ZZC.", cSub}
             EndIf
     EndCase
 

@@ -30,6 +30,7 @@ User Function FATZZE01()
     Local cJson    := ""
     Local cCodRcb  := ""
     Local cErrMsg  := ""
+    Local cSub     := ""
     Local nRecno   := 0
     Local lOk      := .F.
     Local nOk      := 0
@@ -72,20 +73,27 @@ User Function FATZZE01()
         If Empty(jJson:FromJson(cJson))
             aRet := ZZE_MotorRecibo(jJson)
             lOk  := aRet[1]
+            cSub := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
             If !lOk ; cErrMsg := cValToChar(aRet[2]) ; EndIf
         Else
             cErrMsg := "JSON invalido na fila ZZE. COD: " + cCod
         EndIf
         FreeObj(jJson)
 
+        // [REV-ZZCALLBK-UNIFICADO] Jose Carlos - Artiq - 08/2026
+        // U_ZZCALLBK agora usa a mesma assinatura das Notas Fiscais (ver
+        // FATZZF01.prw). U_FATPI08NF (via ZZE_MotorRecibo) ja devolve a
+        // mensagem de sucesso pronta no formato "Nota Varejo Processada:
+        // [filial] - [documento]" - passada como cMsgCustom (8o param) em
+        // vez de cFilNota/cDocumento separados.
         If lOk
             U_UPDSTAT("ZZE", cCod, "S", "")
-            U_ZZCALLBK("ZZE", cCodRcb, "Sucesso", "")
+            U_ZZCALLBK("ZZE", cCodRcb, cSub, .T., "", "", "", cValToChar(aRet[2]))
             nOk++
             ConOut("[FATZZE01] OK: " + cCod)
         Else
             U_UPDSTAT("ZZE", cCod, "E", cErrMsg)
-            U_ZZCALLBK("ZZE", cCodRcb, "Falha", cErrMsg)
+            U_ZZCALLBK("ZZE", cCodRcb, cSub, .F., "", "", cErrMsg)
             nErr++
             ConOut("[FATZZE01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
@@ -103,6 +111,11 @@ Static Function ZZE_MotorRecibo(jJson)
     Local aEmp   := {}
     Local jRes   := Nil
     Local aRet   := {.F., ""}
+    // [REV-ZZCALLBK-UNIFICADO] Jose Carlos - Artiq - 08/2026
+    // cod_Subseccao extraido aqui (igual ZZA_MotorSaida/ZZD_MotorNFCe ja
+    // fazem) pra alimentar o callback unificado (ver U_ZZCALLBK) - antes
+    // nao era usado, o mecanismo antigo do Recibo nao mandava esse campo.
+    Local cSub   := ""
 
     If ValType(jJson['notas']) == "A" .And. Len(jJson['notas']) > 0
         oData := jJson['notas'][1]
@@ -110,16 +123,18 @@ Static Function ZZE_MotorRecibo(jJson)
         oData := jJson
     EndIf
 
+    cSub := cValToChar(U_PI_VAL_X(oData, 'cod_Subseccao'))
+
     aEmp := U_PI_FILIAL_X(U_PI_LIMPA_X(U_PI_STR_X(oData, "num_SubseccaoCNPJ")))
-    If Len(aEmp) < 2 ; Return {.F., "Filial nao encontrada (ZZE/RCV)"} ; EndIf
+    If Len(aEmp) < 2 ; Return {.F., "Filial nao encontrada (ZZE/RCV)", cSub} ; EndIf
     If aEmp[1] != cEmpAnt .Or. aEmp[2] != cFilAnt ; RpcClearEnv() ; RpcSetEnv(aEmp[1], aEmp[2], Nil, Nil, "LOJ") ; EndIf
 
     jRes := U_FATPI08NF(oData, aEmp[2])
 
     If jRes:HasProperty('resultado') .And. AllTrim(jRes['resultado']) == "Sucesso"
-        aRet := {.T., AllTrim(jRes['mensagem'])}
+        aRet := {.T., AllTrim(jRes['mensagem']), cSub}
     Else
-        aRet := {.F., IIF(jRes:HasProperty('mensagem'), AllTrim(jRes['mensagem']), "Erro FATPI08NF")}
+        aRet := {.F., IIF(jRes:HasProperty('mensagem'), AllTrim(jRes['mensagem']), "Erro FATPI08NF"), cSub}
     EndIf
     FreeObj(jRes)
 Return aRet

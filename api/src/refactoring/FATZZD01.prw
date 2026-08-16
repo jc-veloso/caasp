@@ -75,6 +75,8 @@ User Function FATZZD01()
     Local nErr     := 0
     Local jJson    := Nil
     Local aRet     := {}
+    Local aFila    := {}
+    Local nJ       := 0
 
     Private __cBatch := "1"
 
@@ -93,10 +95,27 @@ User Function FATZZD01()
 
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZD, .T., .T.)
 
+    // [FIX-ALIAS-EVICTION] Jose Carlos - Artiq - 08/2026
+    // Erro reproduzido em teste real: "Alias does not exist <alias>" no
+    // (cAliZZD)->(DbSkip()) logo apos processar a 1a nota. Causa: cAliZZD
+    // (cursor TOPCONN via GetNextAlias) ficava aberto durante o loop
+    // inteiro, inclusive durante a chamada a ZZD_MotorNFCe -> U_PI_SAIDA_X
+    // -> MaNfs2Nfs (FATPI01S.prw) - o motor nativo de faturamento mexe
+    // pesado em work areas internamente (SE1/SE5/SD1/SFT/SF3, motor de
+    // impostos etc.) e pode evictar/reciclar o slot do cursor mais antigo
+    // ainda aberto. Corrigido materializando a fila inteira numa array
+    // ANTES de processar qualquer nota - o cursor TOPCONN fecha logo
+    // depois de ler a fila, entao nao sobrevive a nenhuma chamada ao motor.
     While (cAliZZD)->(!Eof())
-        cCod    := AllTrim((cAliZZD)->ZZD_COD)
-        cChvNFe := AllTrim((cAliZZD)->ZZD_CHVNFE)
-        nRecno  := (cAliZZD)->RECNO
+        aAdd(aFila, {AllTrim((cAliZZD)->ZZD_COD), AllTrim((cAliZZD)->ZZD_CHVNFE), (cAliZZD)->RECNO})
+        (cAliZZD)->(DbSkip())
+    EndDo
+    (cAliZZD)->(DbCloseArea())
+
+    For nJ := 1 To Len(aFila)
+        cCod    := aFila[nJ][1]
+        cChvNFe := aFila[nJ][2]
+        nRecno  := aFila[nJ][3]
         cErrMsg := ""
         cSub    := ""
         cFilCb  := ""
@@ -138,10 +157,7 @@ User Function FATZZD01()
             nErr++
             ConOut("[FATZZD01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
-
-        (cAliZZD)->(DbSkip())
-    EndDo
-    (cAliZZD)->(DbCloseArea())
+    Next nJ
 
     ConOut("[FATZZD01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
     RpcClearEnv()

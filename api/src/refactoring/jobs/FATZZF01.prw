@@ -45,6 +45,9 @@ User Function FATZZF01()
 //  Local jJson    := Nil
     Local aRet     := {}
     Local cTabPai  := ""
+    // [TIMING] Jose Carlos - Artiq - 08/2026 - instrumentacao temporaria,
+    // ver mesma nota em FATZZD01.prw - tirar depois de ter os numeros.
+    Local nTIni    := 0
 
     Private __cBatch := "1"
 
@@ -75,7 +78,9 @@ User Function FATZZF01()
         U_UPDSTAT("ZZF", cCod, "A", "")
         ConOut("[FATZZF01] Cadastrando produto: " + cCodLeg + " | Ref: " + cChvRef + " | Tipo: " + cTipoNF)
 
-        aRet := ZZF_CADPRD(cCodLeg)
+        nTIni := Seconds()
+        aRet  := ZZF_CADPRD(cCodLeg)
+        ConOut("[TIMING][FATZZF01] ZZF_CADPRD: " + cValToChar(Seconds() - nTIni) + "s | " + cCodLeg)
         lOk  := aRet[1]
         If !lOk ; cErrMsg := cValToChar(aRet[2]) ; EndIf
 
@@ -116,11 +121,13 @@ User Function FATZZF01()
                 // continua distinta por dominio. cTab corrigido de "ZZF" pra
                 // "ZZE" (a fila "ZZF" nunca foi um dominio de callback de
                 // verdade - era so um resquicio do dispatch antigo).
+                nTIni := Seconds()
                 If cTabPai == "ZZE"
                     U_ZZCALLBK("ZZE", cChvRef, "", .T., "", "", "", "Todos os produtos cadastrados. Nota liberada para processamento.")
                 Else
                     U_ZZCALLBK(cTabPai, cChvRef, "", .T., "", "", "", "Produtos cadastrados. Nota em processamento.")
                 EndIf
+                ConOut("[TIMING][FATZZF01] Callback iPaaS: " + cValToChar(Seconds() - nTIni) + "s | " + cChvRef)
             EndIf
         Else
             U_UPDSTAT("ZZF", cCod, "E", cErrMsg)
@@ -145,7 +152,9 @@ User Function FATZZF01()
 
             // [REV-ZZCALLBK-UNIFICADO] Mensagem ja era identica nos dois
             // ramos - colapsado numa chamada so, sem Do Case.
+            nTIni := Seconds()
             U_ZZCALLBK(cTabPai, cChvRef, "", .F., "", "", "Produto pendente nao cadastrado: " + cErrMsg)
+            ConOut("[TIMING][FATZZF01] Callback iPaaS (erro): " + cValToChar(Seconds() - nTIni) + "s | " + cChvRef)
         EndIf
 
         (cAliZZF)->(DbSkip())
@@ -207,6 +216,14 @@ Static Function ZZF_CADPRD(cCodLeg)
     Local aRes      := {}
     Local aHeader   := {}
     Local cUrl      := "https://api.caasp.org.br/integracoes/totvs/produtos/listar"
+    // [FIX-TOKEN-TAMANHO] Jose Carlos - Artiq - 08/2026
+    // Token JWT hardcoded como fallback default de MV_XCPTOK - decisao
+    // temporaria e consciente, nao descuido: o campo X6_CONTEUD do SX6 nao
+    // comporta o tamanho do JWT (excede o limite do parametro). Jose
+    // Carlos vai alinhar com o time de arquitetura uma solucao definitiva
+    // (provavelmente uma tabela em vez de SX6) - ate la, mantido assim.
+    // Continua puxando MV_XCPTOK primeiro; o literal aqui so entra em jogo
+    // se o parametro estiver vazio/nao cadastrado.
     Local cToken    := AllTrim(SuperGetMv("MV_XCPTOK", .F., "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1bmlxdWVfbmFtZSI6IlRPVFZTIiwianRpIjoiOTQ5ZjU1ZDY5YjQ0NDU5YWFmODBjMTAzOWQ1ODVlM2IiLCJuYmYiOjE3NjU4MTk5NDQsImV4cCI6MTc2NTgyMzU0NCwiaWF0IjoxNzY1ODE5OTQ0LCJpc3MiOiJodHRwczovL2FwaS5jYWFzcC5vcmcuYnIiLCJhdWQiOiJodHRwczovL2FwaS5jYWFzcC5vcmcuYnIifQ.22h-Y1zND9xcZFrWocakbDiItreh367rRYiTPqOIhNA"))
     Local cBody     := ""
     Local cHeadRet  := ""
@@ -218,6 +235,7 @@ Static Function ZZF_CADPRD(cCodLeg)
     Local nTent     := 0
     Local lHttpOk   := .F.
     Local cErroHttp := ""
+    Local nTIni     := 0  // [TIMING] instrumentacao temporaria, ver FATZZF01()
 
     If Empty(cToken)
         Return {.F., "Parametro MV_XCPTOK (token da API CAASP) nao configurado."}
@@ -232,7 +250,9 @@ Static Function ZZF_CADPRD(cCodLeg)
         aHeader := {}
         aAdd(aHeader, "Authorization: Bearer " + cToken)
         cHeadRet := ""
+        nTIni := Seconds()
         cBody := HttpGet(cUrl + "?int_PaginaAtual=1&int_ItemsPorPagina=1&cod_Produto=" + AllTrim(cCodLeg), "", nTimeOut, aHeader, @cHeadRet)
+        ConOut("[TIMING][ZZF_CADPRD] HttpGet CAASP (tentativa " + cValToChar(nTent + 1) + "): " + cValToChar(Seconds() - nTIni) + "s | " + cCodLeg)
 
         If Empty(cBody) .Or. !("200" $ cHeadRet .Or. "201" $ cHeadRet)
             cErroHttp := "Header resposta: " + cHeadRet
@@ -270,7 +290,9 @@ Static Function ZZF_CADPRD(cCodLeg)
         Return {.F., "Motor PI_PROD_X (FATPI02) nao disponivel. Verificar compilacao."}
     EndIf
 
-    aRes := U_PI_PROD_X(jProd)
+    nTIni := Seconds()
+    aRes  := U_PI_PROD_X(jProd)
+    ConOut("[TIMING][ZZF_CADPRD] U_PI_PROD_X: " + cValToChar(Seconds() - nTIni) + "s | " + cCodLeg)
     If aRes[1]
         aRet := {.T., "Produto cadastrado: " + aRes[3]}
     Else

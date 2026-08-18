@@ -77,6 +77,11 @@ User Function FATZZD01()
     Local aRet     := {}
     Local aFila    := {}
     Local nJ       := 0
+    // [TIMING] Jose Carlos - Artiq - 08/2026 - instrumentacao temporaria
+    // pra medir onde o tempo de processamento vai (~8s/nota observados em
+    // teste real) - tirar depois de ter os numeros, nao e pra ficar no
+    // codigo definitivo.
+    Local nTIni    := 0
 
     Private __cBatch := "1"
 
@@ -132,7 +137,9 @@ User Function FATZZD01()
 
         jJson := JsonObject():New()
         If Empty(jJson:FromJson(cJson))
-            aRet := ZZD_MotorNFCe(jJson)
+            nTIni := Seconds()
+            aRet  := ZZD_MotorNFCe(jJson)
+            ConOut("[TIMING][FATZZD01] ZZD_MotorNFCe: " + cValToChar(Seconds() - nTIni) + "s | " + cCod)
             lOk  := aRet[1]
             cSub := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
             If lOk
@@ -148,12 +155,16 @@ User Function FATZZD01()
 
         If lOk
             U_UPDSTAT("ZZD", cCod, "S", "")
+            nTIni := Seconds()
             U_ZZCALLBK("ZZD", cChvNFe, cSub, .T., cFilCb, cDocCb, "")
+            ConOut("[TIMING][FATZZD01] Callback iPaaS: " + cValToChar(Seconds() - nTIni) + "s | " + cCod)
             nOk++
             ConOut("[FATZZD01] OK: " + cCod)
         Else
             U_UPDSTAT("ZZD", cCod, "E", cErrMsg)
+            nTIni := Seconds()
             U_ZZCALLBK("ZZD", cChvNFe, cSub, .F., "", "", cErrMsg)
+            ConOut("[TIMING][FATZZD01] Callback iPaaS: " + cValToChar(Seconds() - nTIni) + "s | " + cCod)
             nErr++
             ConOut("[FATZZD01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
@@ -200,6 +211,7 @@ Static Function ZZD_MotorNFCe(jJson)
     Local lCest        := .T.
     Local lNcm         := .T.
     Local aRetCfop     := {}
+    Local nTIni        := 0  // [TIMING] instrumentacao temporaria, ver FATZZD01()
 
     If ValType(jJson['notas']) == "A" .And. Len(jJson['notas']) > 0
         oData := jJson['notas'][1]
@@ -383,7 +395,9 @@ Static Function ZZD_MotorNFCe(jJson)
     // Saida comum).
     U_PI_SETFCA(cTab, cCod, cLoja, cCondSafe, oData)
 
-    aRet := U_PI_SAIDA_X(aPrd, oData, cCod, cLoja, "", cSer, "", cTab, .F., cNF, "", "", cCondSafe)
+    nTIni := Seconds()
+    aRet  := U_PI_SAIDA_X(aPrd, oData, cCod, cLoja, "", cSer, "", cTab, .F., cNF, "", "", cCondSafe)
+    ConOut("[TIMING][ZZD_MotorNFCe] U_PI_SAIDA_X (MaNfs2Nfs): " + cValToChar(Seconds() - nTIni) + "s")
 
     If !aRet[1]
         Return {.F., "MANFS2NFS: " + cValToChar(aRet[2]), cSub}

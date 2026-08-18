@@ -896,6 +896,16 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 		cItemOri := U_PI_STR_X(aPrd[nI], 'num_ProdutoSequencialOrigem')
 		cChaveOri := U_PI_STR_X(aPrd[nI], 'cod_ChaveNFeOrigem')
 
+		// [FIX-D2FILIAL] Jose Carlos - Artiq - 08/2026
+		// nD2FILIAL era calculado (Ascan) mas nunca usado pra preencher
+		// aItens - diferente de nF2FILIAL, que ja preenchia aCabs[nF2FILIAL]
+		// := xFilial("SF2") no cabecalho. Sem isso, todo item gerado por
+		// U_PI_SAIDA_X ficava com D2_FILIAL em branco (o loop de
+		// inicializacao do array so limpa pra "" - nunca reatribui).
+		// Reproduzido em teste real: 1 de 20 NFCe quebrou por causa disso.
+		If nD2FILIAL > 0
+			aItens[nPos, nD2FILIAL] := xFilial("SD2")
+		EndIf
 
 		If nD2DOC > 0
 			aItens[nPos, nD2DOC]    := cDocPad
@@ -1132,7 +1142,7 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_SALDO   := nVlrP
 				SE1->E1_VLCRUZ  := nVlrP
 				SE1->E1_CCUSTO  := cCusto
-				SE1->E1_ORIGEM  := 'MATA460'
+//				SE1->E1_ORIGEM  := 'MATA460'
 				SE1->E1_FLUXO   := 'S'
 				SE1->E1_HIST    := cHist
 				SE1->E1_STATUS  := 'A'

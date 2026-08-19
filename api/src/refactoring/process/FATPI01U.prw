@@ -2,6 +2,7 @@
 #Include 'TbiConn.ch'
 #Include 'TopConn.ch'
 #Include 'RestFul.ch'
+#Include 'FWMVCDef.ch'
 
 /*
 +----------------------------------------------------------------------------+

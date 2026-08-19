@@ -28,12 +28,20 @@
 |   a do FATPI10 (que precisa cobrir produto pendente em qualquer         |
 |   dominio, inclusive ZZA/ZZB/ZZC/ZZE).                                    |
 |                                                                             |
-| [CONTRATO-CONFIRMADO] Jose Carlos - Artiq - 08/2026                       |
-|   Formato do payload ({tipo, chave, dados}) e o numero do endpoint       |
-|   (FATPI11, POST /fatpi11/v2) confirmados com o Arthur - bateram exato   |
-|   com a melhor interpretacao original da instrucao, sem mudanca de       |
-|   codigo necessaria. Item de checklist da instrucao_zzg_cliente_         |
-|   fornecedor.md fechado.                                                  |
+| [CONTRATO-CONFIRMADO-V2] Jose Carlos - Artiq - 08/2026                    |
+|   Contrato mudou de novo (confirmado com o Arthur em 16/08, ver          |
+|   instrucao_sync_pi_cli_forn_2.md) - "tipo" nao e mais CLI/FOR, agora e   |
+|   o TIPO DA NOTA (mesmo dominio de ZZG_TIPONF - "ZZ9" pra NFe, "NFC"      |
+|   pra NFCe). Quem carrega CLI/FOR agora e o campo novo                   |
+|   "tp_Participante", no nivel raiz do envelope. "chave" e enviada de      |
+|   verdade (cod_ChaveNFe) - suspeita anterior de que nao viria estava      |
+|   errada. "dados" e exatamente o cadastro (Json tabela muro Cliente/     |
+|   Fornecedor.txt) menos o tp_Participante, que foi extraido pra fora.    |
+|   Payload atual:                                                          |
+|     { "tipo": "NFC", "chave": "...", "tp_Participante": "CLI",           |
+|       "dados": {...} }                                                    |
+|   Como "tipo" ja diz a tabela, a busca da nota pai agora e direta (SELECT |
+|   na tabela certa), sem precisar varrer ZZ9 e ZZD como antes.            |
 |                                                                             |
 | [FIX-ZZG-GRV] A gravacao usa U_ZZG_GRV (FATZZG01.prw), nao               |
 |   U_ZZX_Gravar como o doc sugeria literalmente na Parte 3 - ZZG precisa  |
@@ -56,13 +64,11 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 	Local jRes        := JsonObject():New()
 	Local jDados      := Nil
 	Local nStat       := 200
-	Local cTipo       := ""
+	Local cTipoNF     := ""
 	Local cChave      := ""
-	Local aTabs       := {}
+	Local cTipoPen    := ""
 	Local cTabAch     := ""
-	Local cTipoAch    := ""
 	Local cCampChv    := ""
-	Local nI          := 0
 	Local cQryAux     := ""
 	Local cAliAux     := ""
 	Local lJa         := .F.
@@ -89,70 +95,81 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 	EndIf
 
 	// --- 3. EXTRACAO E VALIDACAO DO PAYLOAD ---
-	cTipo  := Upper(AllTrim(U_PI_STR_X(jJson, 'tipo')))
-	cChave := AllTrim(U_PI_STR_X(jJson, 'chave'))
-	jDados := jJson['dados']
+	// [CONTRATO-CONFIRMADO-V2] tipo = tipo da nota (ZZ9/NFC), nao mais
+	// CLI/FOR - quem carrega isso agora e tp_Participante.
+	cTipoNF  := Upper(AllTrim(U_PI_STR_X(jJson, 'tipo')))
+	cChave   := AllTrim(U_PI_STR_X(jJson, 'chave'))
+	cTipoPen := Upper(AllTrim(U_PI_STR_X(jJson, 'tp_Participante')))
+	jDados   := jJson['dados']
 
-	If Empty(cTipo) .Or. Empty(cChave) .Or. (ValType(jDados) != "J" .And. ValType(jDados) != "O")
+	If Empty(cTipoNF) .Or. Empty(cChave) .Or. Empty(cTipoPen) .Or. (ValType(jDados) != "J" .And. ValType(jDados) != "O")
 		nStat := 200
 		jRes['status']    := nStat
 		jRes['resultado'] := "Falha"
 		jRes['erro']      := "Payload"
-		jRes['mensagem']  := "Campos obrigatorios: tipo (CLI/FOR), chave, dados (objeto)."
+		jRes['mensagem']  := "Campos obrigatorios: tipo (ZZ9/NFC), chave, tp_Participante (CLI/FOR), dados (objeto)."
 		Self:setStatus(nStat)
 		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 		Return .T.
 	EndIf
 
-	If !(cTipo $ "CLI/FOR")
+	If !(cTipoNF $ "ZZ9/NFC")
 		nStat := 200
 		jRes['status']    := nStat
 		jRes['resultado'] := "Falha"
 		jRes['erro']      := "Tipo"
-		jRes['mensagem']  := "Tipo invalido: " + cTipo + ". Esperado CLI ou FOR."
+		jRes['mensagem']  := "tipo invalido: " + cTipoNF + ". Esperado ZZ9 ou NFC."
 		Self:setStatus(nStat)
 		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 		Return .T.
 	EndIf
 
-	// --- 4. LOCALIZA A NOTA PAI (ZZ9 ou ZZD - unicos dominios com     ---
-	// --- cliente/fornecedor pendente, ver Parte 5 da instrucao)       ---
-	aTabs := {{"ZZ9", "CHVNFE", "ZZ9"}, {"ZZD", "CHVNFE", "NFC"}}
+	If !(cTipoPen $ "CLI/FOR")
+		nStat := 200
+		jRes['status']    := nStat
+		jRes['resultado'] := "Falha"
+		jRes['erro']      := "TipoParticipante"
+		jRes['mensagem']  := "tp_Participante invalido: " + cTipoPen + ". Esperado CLI ou FOR."
+		Self:setStatus(nStat)
+		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
+		Return .T.
+	EndIf
 
-	For nI := 1 To Len(aTabs)
-		cCampChv := aTabs[nI][1] + "_" + aTabs[nI][2]
-		cQryAux := "SELECT " + cCampChv + " FROM " + RetSqlName(aTabs[nI][1]) + " WHERE " + cCampChv + " = '" + cChave + "' AND D_E_L_E_T_ = ' '"
-		cAliAux := GetNextAlias()
-		MpSysOpenQuery(cQryAux, cAliAux)
-		If (cAliAux)->(!Eof())
-			cTabAch  := aTabs[nI][1]
-			cTipoAch := aTabs[nI][3]
-			(cAliAux)->(DbCloseArea())
-			Exit
-		EndIf
+	// --- 4. LOCALIZA A NOTA PAI (busca direta - "tipo" ja diz a tabela, ---
+	// --- nao precisa mais varrer ZZ9 e ZZD)                             ---
+	cTabAch  := IIF(cTipoNF == "NFC", "ZZD", "ZZ9")
+	cCampChv := cTabAch + "_CHVNFE"
+
+	cQryAux := "SELECT " + cCampChv + " FROM " + RetSqlName(cTabAch) + " WHERE " + cCampChv + " = '" + cChave + "' AND D_E_L_E_T_ = ' '"
+	cAliAux := GetNextAlias()
+	MpSysOpenQuery(cQryAux, cAliAux)
+	If (cAliAux)->(Eof())
 		(cAliAux)->(DbCloseArea())
-	Next nI
-
-	If Empty(cTabAch)
-		nStat := 404
+		// [FIX-STATUS-404] Jose Carlos - Artiq - 08/2026
+		// NUNCA 4xx/5xx aqui - convencao do projeto e sempre 200 com corpo
+		// explicando o erro (4xx/5xx quebra o iPaaS em transporte, mesmo
+		// motivo do [IPASS-FIX] mais abaixo). Achado numa rodada anterior,
+		// corrigido nesta reescrita - nao repetir o erro.
+		nStat := 200
 		jRes['status']    := nStat
 		jRes['resultado'] := "Falha"
 		jRes['erro']      := "NotaNaoEncontrada"
-		jRes['mensagem']  := "Nenhuma nota encontrada para chave: " + cChave + " (ZZ9/ZZD)."
+		jRes['mensagem']  := "Nota nao encontrada na " + cTabAch + " para chave: " + cChave
 		Self:setStatus(nStat)
 		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 		Return .T.
 	EndIf
+	(cAliAux)->(DbCloseArea())
 
 	// --- 5. GRAVA NA FILA ZZG (com dedup contra retry) ---
-	cQryAux := "SELECT ZZG_COD FROM " + RetSqlName("ZZG") + " WHERE ZZG_CHVREF = '" + cChave + "' AND ZZG_TIPOPEN = '" + cTipo + "' AND ZZG_STATUS IN ('P','A','S') AND D_E_L_E_T_ = ' '"
+	cQryAux := "SELECT ZZG_COD FROM " + RetSqlName("ZZG") + " WHERE ZZG_CHVREF = '" + cChave + "' AND ZZG_TIPOPE = '" + cTipoPen + "' AND ZZG_STATUS IN ('P','A','S') AND D_E_L_E_T_ = ' '"
 	cAliAux := GetNextAlias()
 	MpSysOpenQuery(cQryAux, cAliAux)
 	lJa := (cAliAux)->(!Eof())
 	(cAliAux)->(DbCloseArea())
 
 	If !lJa
-		lGravou := U_ZZG_GRV(cChave, cTipo, cTipoAch, jDados:toJSON())
+		lGravou := U_ZZG_GRV(cChave, cTipoPen, cTipoNF, jDados:toJSON())
 	Else
 		lGravou := .T.
 	EndIf
@@ -160,7 +177,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 	// --- 6. GARANTE <TAB>_CLIPEN/FORPEN = 'S' NA NOTA PAI (idempotente - ---
 	// --- ingestao ja deveria ter marcado via cliente_Pendente/           ---
 	// --- fornecedor_Pendente no payload da nota)                        ---
-	cCampPen := IIF(cTipo == "CLI", cTabAch + "_CLIPEN", cTabAch + "_FORPEN")
+	cCampPen := IIF(cTipoPen == "CLI", cTabAch + "_CLIPEN", cTabAch + "_FORPEN")
 	TCSqlExec("UPDATE " + RetSqlName(cTabAch) + " SET " + cCampPen + " = 'S' WHERE " + cCampChv + " = '" + cChave + "' AND D_E_L_E_T_ = ' '")
 
 	If lGravou
@@ -168,7 +185,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 		jRes['status']    := nStat
 		jRes['resultado'] := "Sucesso"
 		jRes['tabela']    := cTabAch
-		jRes['mensagem']  := IIF(cTipo == "CLI", "Cliente", "Fornecedor") + " pendente enfileirado na ZZG."
+		jRes['mensagem']  := IIF(cTipoPen == "CLI", "Cliente", "Fornecedor") + " pendente enfileirado na ZZG."
 	Else
 		nStat := 230  // [IPASS-FIX] Falha de sistema (gravacao na fila) - 2xx pra nao quebrar o iPaaS em transporte, mesmo padrao do FATPI10
 		jRes['status']    := nStat

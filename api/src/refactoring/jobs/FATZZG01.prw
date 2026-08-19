@@ -16,7 +16,7 @@ Static CFILPAD := "01001"
 | Descritivo: FATZZG01 - Job Schedule - Fila ZZG (Cliente/Fornecedor       |
 |             Pendente)                                                     |
 |             Para cada pendencia: chama U_PI_CLI_X ou U_PI_FORN_X          |
-|             conforme ZZG_TIPOPEN. Ao concluir TODAS as pendencias de uma  |
+|             conforme ZZG_TIPOPE. Ao concluir TODAS as pendencias de uma  |
 |             chave ZZG_CHVREF (e tambem nao haver mais pendencia de        |
 |             produto na ZZF pra essa mesma chave - ver U_ZZPENDOK em       |
 |             FATZZF01.prw), zera CLIPEN/FORPEN/PRDPEN na tabela Muro pai   |
@@ -72,7 +72,7 @@ User Function FATZZG01()
     // [FIX-MEMO] Nao seleciona ZZG_JSON aqui - le via R_E_C_N_O_ + DbGoto
     // na area nativa, mais abaixo (mesmo fix aplicado em todos os outros
     // Jobs FATZZ*, ver [FIX-MEMO] em FATZZF01.prw).
-    cQry := "SELECT ZZG_COD, ZZG_CHVREF, ZZG_TIPOPEN, ZZG_TIPONF, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZG") + " "
+    cQry := "SELECT ZZG_COD, ZZG_CHVREF, ZZG_TIPOPE, ZZG_TIPONF, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZG") + " "
     cQry += "WHERE ZZG_STATUS IN ('P','A') "
     cQry += "AND ZZG_FILIAL = '" + xFilial("ZZG") + "' "
     cQry += "AND D_E_L_E_T_ = ' ' "
@@ -83,7 +83,7 @@ User Function FATZZG01()
     While (cAliZZG)->(!Eof())
         cCod    := AllTrim((cAliZZG)->ZZG_COD)
         cChvRef := AllTrim((cAliZZG)->ZZG_CHVREF)
-        cTipoPen:= AllTrim((cAliZZG)->ZZG_TIPOPEN)
+        cTipoPen:= AllTrim((cAliZZG)->ZZG_TIPOPE)
         cTipoNF := AllTrim((cAliZZG)->ZZG_TIPONF)
         nRecno  := (cAliZZG)->RECNO
         cErrMsg := ""
@@ -105,7 +105,7 @@ User Function FATZZG01()
             ElseIf cTipoPen == "FOR"
                 aRet := U_PI_FORN_X(jJson)
             Else
-                aRet := {.F., "ZZG_TIPOPEN inesperado (apenas CLI/FOR e aceito): " + cTipoPen}
+                aRet := {.F., "ZZG_TIPOPE inesperado (apenas CLI/FOR e aceito): " + cTipoPen}
             EndIf
             ConOut("[TIMING][FATZZG01] " + cTipoPen + ": " + cValToChar(Seconds() - nTIni) + "s | " + cCod)
             lOk := aRet[1]
@@ -130,7 +130,13 @@ User Function FATZZG01()
                 ConOut("[FATZZG01] Nota liberada na " + cTabPai + " | Chave: " + cChvRef)
 
                 nTIni := Seconds()
-                U_ZZCALLBK(cTabPai, cChvRef, "", .T., "", "", "", "Cadastro de " + IIF(cTipoPen == "CLI", "cliente", "fornecedor") + " concluido. Nota em processamento.")
+                // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
+                // Callback intermediario de liberacao desativado - pendente
+                // alinhar com Arthur a semantica exata de
+                // flg_Processamento="A". Reavaliar antes de reativar. So o
+                // callback do processamento final da nota (FATZZA01/B01/
+                // C01/D01/E01) continua ativo.
+                // U_ZZCALLBK(cTabPai, cChvRef, "", .T., "", "", "", "Cadastro de " + IIF(cTipoPen == "CLI", "cliente", "fornecedor") + " concluido. Nota em processamento.")
                 ConOut("[TIMING][FATZZG01] Callback iPaaS: " + cValToChar(Seconds() - nTIni) + "s | " + cChvRef)
             EndIf
         Else
@@ -142,7 +148,13 @@ User Function FATZZG01()
             // ser feito apos falha - a nota nunca vai liberar sozinha,
             // avisa o Arthur em vez de deixar represada silenciosamente.
             cTabPai := IIF(cTipoNF == "ZZ9", "ZZ9", "ZZD")
-            U_ZZCALLBK(cTabPai, cChvRef, "", .F., "", "", "Cadastro de " + IIF(cTipoPen == "CLI", "cliente", "fornecedor") + " pendente falhou: " + cErrMsg)
+            // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
+            // Callback intermediario de liberacao desativado - pendente
+            // alinhar com Arthur a semantica exata de
+            // flg_Processamento="A". Reavaliar antes de reativar. So o
+            // callback do processamento final da nota (FATZZA01/B01/
+            // C01/D01/E01) continua ativo.
+            // U_ZZCALLBK(cTabPai, cChvRef, "", .F., "", "", "Cadastro de " + IIF(cTipoPen == "CLI", "cliente", "fornecedor") + " pendente falhou: " + cErrMsg)
         EndIf
 
         (cAliZZG)->(DbSkip())
@@ -174,7 +186,7 @@ User Function ZZG_GRV(cChvRef, cTipoPen, cTipoNF, cJsonPayload)
         ZZG->ZZG_COD     := PadR(cCod, TamSx3("ZZG_COD")[1])
         ZZG->ZZG_STATUS  := "P"
         ZZG->ZZG_CHVREF  := PadR(cChvRef, TamSx3("ZZG_CHVREF")[1])
-        ZZG->ZZG_TIPOPEN := PadR(cTipoPen, TamSx3("ZZG_TIPOPEN")[1])
+        ZZG->ZZG_TIPOPE := PadR(cTipoPen, TamSx3("ZZG_TIPOPE")[1])
         ZZG->ZZG_TIPONF  := PadR(cTipoNF, TamSx3("ZZG_TIPONF")[1])
         ZZG->ZZG_JSON    := cJsonPayload
         ZZG->ZZG_DTINCL  := Date()

@@ -113,7 +113,7 @@ endpoint síncrono.
 Estrutura (conferir contra `CLAUDE.md`/SIGACFG antes de criar campos,
 mesma regra de sempre — não inventar):
 - `ZZG_FILIAL`, `ZZG_COD` — padrão.
-- `ZZG_TIPOPEN` — `"CLI"` ou `"FOR"` (discrimina qual função chamar,
+- `ZZG_TIPOPE` — `"CLI"` ou `"FOR"` (discrimina qual função chamar,
   mesmo espírito do `ZZF_TIPONF`).
 - `ZZG_CHVREF` — chave da nota que está esperando esse cadastro (mesmo
   papel do `ZZF_CHVREF`).
@@ -135,7 +135,7 @@ campo de `ZZG` seguem o padrão genérico que `ZZX_Gravar` já espera).
 Mesmo esqueleto do `FATZZF01.prw`, mais simples (sem GET externo):
 1. Query: `ZZG_STATUS IN ('P','A')`.
 2. Por registro: lê `ZZG_JSON`, chama `U_PI_CLI_X`/`U_PI_FORN_X` conforme
-   `ZZG_TIPOPEN`.
+   `ZZG_TIPOPE`.
 3. Sucesso: `U_UPDSTAT("ZZG", cCod, "S", "")`.
 4. Depois, igual ao `ZZF_ALL_OK`/`ZZF_LIBNF`: checar se a nota
    referenciada (`ZZG_CHVREF`) não tem mais nenhuma pendência (nem

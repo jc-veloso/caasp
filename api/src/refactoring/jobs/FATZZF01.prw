@@ -122,11 +122,17 @@ User Function FATZZF01()
                 // "ZZE" (a fila "ZZF" nunca foi um dominio de callback de
                 // verdade - era so um resquicio do dispatch antigo).
                 nTIni := Seconds()
-                If cTabPai == "ZZE"
-                    U_ZZCALLBK("ZZE", cChvRef, "", .T., "", "", "", "Todos os produtos cadastrados. Nota liberada para processamento.")
-                Else
-                    U_ZZCALLBK(cTabPai, cChvRef, "", .T., "", "", "", "Produtos cadastrados. Nota em processamento.")
-                EndIf
+                // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
+                // Callback intermediario de liberacao desativado - pendente
+                // alinhar com Arthur a semantica exata de
+                // flg_Processamento="A". Reavaliar antes de reativar. So o
+                // callback do processamento final da nota (FATZZA01/B01/
+                // C01/D01/E01) continua ativo.
+                // If cTabPai == "ZZE"
+                //     U_ZZCALLBK("ZZE", cChvRef, "", .T., "", "", "", "Todos os produtos cadastrados. Nota liberada para processamento.")
+                // Else
+                //     U_ZZCALLBK(cTabPai, cChvRef, "", .T., "", "", "", "Produtos cadastrados. Nota em processamento.")
+                // EndIf
                 ConOut("[TIMING][FATZZF01] Callback iPaaS: " + cValToChar(Seconds() - nTIni) + "s | " + cChvRef)
             EndIf
         Else
@@ -153,7 +159,13 @@ User Function FATZZF01()
             // [REV-ZZCALLBK-UNIFICADO] Mensagem ja era identica nos dois
             // ramos - colapsado numa chamada so, sem Do Case.
             nTIni := Seconds()
-            U_ZZCALLBK(cTabPai, cChvRef, "", .F., "", "", "Produto pendente nao cadastrado: " + cErrMsg)
+            // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
+            // Callback intermediario de liberacao desativado - pendente
+            // alinhar com Arthur a semantica exata de
+            // flg_Processamento="A". Reavaliar antes de reativar. So o
+            // callback do processamento final da nota (FATZZA01/B01/
+            // C01/D01/E01) continua ativo.
+            // U_ZZCALLBK(cTabPai, cChvRef, "", .F., "", "", "Produto pendente nao cadastrado: " + cErrMsg)
             ConOut("[TIMING][FATZZF01] Callback iPaaS (erro): " + cValToChar(Seconds() - nTIni) + "s | " + cChvRef)
         EndIf
 
@@ -498,6 +510,19 @@ User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cC
         (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_HRINCL"), Time()))
         (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_PRDPEN"), cPrdPend))
         (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_ERRMSG"), ""))
+        // [FIX-CLIFOR-BRANCO] Jose Carlos - Artiq - 08/2026
+        // ZZ9_CLIPEN/ZZ9_FORPEN ficavam em branco num registro novo (RecLock
+        // nao aplica o default do SIGACFG num INCLUI feito assim, fora de
+        // MVC) - a query dos Jobs (FATZZ901.prw/FATZZD01.prw) filtra por
+        // "= 'N'" literal, entao branco nunca batia e a nota ficava presa
+        // pra sempre. So ZZ9/ZZD tem esses campos - guarda FieldPos (as
+        // demais tabelas nao tem).
+        If FieldPos(cTabMuro + "_CLIPEN") > 0
+            (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_CLIPEN"), "N"))
+        EndIf
+        If FieldPos(cTabMuro + "_FORPEN") > 0
+            (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_FORPEN"), "N"))
+        EndIf
         // [QTPROD] Jose Carlos - Artiq - 08/2026 - parametro dedicado (nao
         // cCampoExtra/cValorExtra) porque QTPROD e universal as 6 tabelas de
         // nota, enquanto cCampoExtra ja esta ocupado por campo especifico em

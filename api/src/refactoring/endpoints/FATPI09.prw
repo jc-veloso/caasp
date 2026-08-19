@@ -314,6 +314,18 @@ Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, 
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_HRINCL"), Time()))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_PRDPEN"),cPrdPend))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_ERRMSG"), ""))
+		// [FIX-CLIFOR-BRANCO] Jose Carlos - Artiq - 08/2026
+		// ZZD_CLIPEN/ZZD_FORPEN ficavam em branco num registro novo (RecLock
+		// nao aplica o default do SIGACFG num INCLUI assim, fora de MVC) - a
+		// query do FATZZD01.prw filtra por "= 'N'" literal, entao branco
+		// nunca batia e a nota ficava presa pra sempre. Guarda FieldPos por
+		// seguranca (mesmo padrao ja usado pro _QTPROD logo abaixo).
+		If FieldPos(cTabMuro + "_CLIPEN") > 0
+			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_CLIPEN"), "N"))
+		EndIf
+		If FieldPos(cTabMuro + "_FORPEN") > 0
+			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_FORPEN"), "N"))
+		EndIf
 		// Campo numerico (N) no SIGACFG - Val(), nao FieldPut direto do texto
 		// (confirmado com Jose Carlos, ver instrucao_qtprod.md).
 		If FieldPos(cTabMuro + "_QTPROD") > 0

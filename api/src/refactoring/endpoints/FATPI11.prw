@@ -28,13 +28,12 @@
 |   a do FATPI10 (que precisa cobrir produto pendente em qualquer         |
 |   dominio, inclusive ZZA/ZZB/ZZC/ZZE).                                    |
 |                                                                             |
-| [CONTRATO-NAO-CONFIRMADO] Formato do payload ({tipo, chave, dados}) e o   |
-|   numero do endpoint (FATPI11) sao a melhor interpretacao do doc da      |
-|   instrucao - AINDA NAO confirmados com o Arthur (checklist da           |
-|   instrucao_zzg_cliente_fornecedor.md marca isso como pendencia em       |
-|   aberto: "Decidir o numero do endpoint novo... e o formato exato de     |
-|   {tipo, chave, dados} com o Arthur"). Ajustar quando o contrato real    |
-|   for fechado.                                                            |
+| [CONTRATO-CONFIRMADO] Jose Carlos - Artiq - 08/2026                       |
+|   Formato do payload ({tipo, chave, dados}) e o numero do endpoint       |
+|   (FATPI11, POST /fatpi11/v2) confirmados com o Arthur - bateram exato   |
+|   com a melhor interpretacao original da instrucao, sem mudanca de       |
+|   codigo necessaria. Item de checklist da instrucao_zzg_cliente_         |
+|   fornecedor.md fechado.                                                  |
 |                                                                             |
 | [FIX-ZZG-GRV] A gravacao usa U_ZZG_GRV (FATZZG01.prw), nao               |
 |   U_ZZX_Gravar como o doc sugeria literalmente na Parte 3 - ZZG precisa  |

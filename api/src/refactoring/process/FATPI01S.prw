@@ -931,7 +931,7 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 
 		IF !Empty(cNotaOri) .AND. cTipoOper == 'D'
 			IF lDevol
-				lDevol := FZ_VALID_DEV(cChaveOri,cNotaOri,'C')
+				lDevol := U_FZ_VALID_DEV(cChaveOri,cNotaOri,'C')
 			Endif
 			If nD2NFORI > 0
 				aItens[nPos, nD2NFORI]  := cNotaOri
@@ -995,7 +995,17 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	EndIf
 	Return aRet
 
-Static Function RetOpera(cOper,cCST)
+// [FIX-LOTE-COMPILACAO] Jose Carlos - Artiq - 08/2026
+// Promovida de Static Function pra User Function - era so visivel dentro
+// de FATPI01S.prw (lote de compilacao proprio), mas U_PI_GERANF_X
+// (FATPI01E.prw) e o motor de devolucao (FATPI01D.prw) tambem chamam,
+// erro reproduzido em teste real ("cannot find function RETOPERA in
+// AppMap" em U_PI_GERANF_X). Mesmo motivo de sempre nesse codebase (ver
+// BuscaCad/U_BUSCACAD, FZ_ROLLBACK_NF/U_PI_ROLLBACK_NF etc.) - Static
+// Function nao atravessa lote de compilacao diferente. Chamadores
+// (FATPI01D.prw/FATPI01E.prw) atualizados de RetOpera(...) pra
+// U_RetOpera(...).
+User Function RetOpera(cOper,cCST)
 
 	Local cNewSX5 := GetNextAlias()
 	Local cDescri := cOper + Space(1) + cCST

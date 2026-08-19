@@ -389,7 +389,7 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 			SB1->(DbSetOrder(1))
 			SB1->(DbSeek(xFilial("SB1") + PadR(cProdKey, 30)))
 			cUm := SB1->B1_UM
-			cOper := RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST'])
+			cOper := U_RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST'])
 
 			aLin := {}
 			AAdd(aLin, {"D1_FILIAL", xFilial("SD1"), Nil})

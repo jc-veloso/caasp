@@ -303,3 +303,97 @@ Static Function BuscaCad(cCad,nOpc)
 	Endif
 
 Return lRet
+
+// ==========================================================================
+// PI_NUMERA_X — Numeracao de documento fiscal (SF2/F2_DOC ou SF1/F1_DOC),
+// extraida de ZZ901_Classifica (FATZZ901.prw).
+// [MOVIDO-ZZ901] Jose Carlos - Artiq - 08/2026
+// Bug que originou a mudanca: ZZ901_Classifica trocava de ambiente pra
+// resolver a filial real da nota (RpcSetEnv) e nunca voltava antes de
+// gravar via U_ZZX_Gravar (que usa xFilial(), refletindo a filial ja
+// trocada) - ZZA/ZZC gravavam com filial errada. Corrigido eliminando a
+// troca de ambiente do classificador por completo: SA1/SA2/SF4/SX5 sao
+// cadastro compartilhado entre filiais (confirmado - nao precisam de
+// RpcSetEnv na filial real), so numeracao (GetSxeNum/SX8, por filial) e
+// gravacao fiscal final realmente precisam. Os Jobs de destino
+// (FATZZA01/B01/C01) ja trocam de ambiente pra filial real antes de
+// chamar o motor fiscal - a numeracao move pra dentro desse trecho que ja
+// existia, chamando esta funcao. Ver instrucao_mover_numeracao_para_jobs.md.
+//
+// cTabFis: "SF2" (Saida/NFCe) ou "SF1" (Devolucao/Entrada).
+// cCampoDoc: "F2_DOC" ou "F1_DOC".
+// cNumInformado (opcional): quando a nota ja vem com numero no payload
+// (num_NF/num_NotaFiscal/cod_ReciboVenda - desvio que ja existia em
+// ZZ901_Classifica, preservado aqui), usa esse numero em vez de gerar via
+// GetSxeNum. Relevante principalmente pra Entrada (SF1/F1_DOC e o numero
+// real da nota do fornecedor, nao um numero que o Protheus inventa).
+//
+// Confere disponibilidade do numero gerado (loop com Soma1, mesmo padrao
+// que ja existia), confere duplicidade real (nota ja processada pra esse
+// cCod/cLoja/cSer - mesma query que existia dentro do ZZ901_Classifica) e
+// faz a limpeza SFT/SF3 (tambem movida de ZZ901_Classifica - so fazia
+// sentido junto do numero definitivo). Chamar ANTES de qualquer efeito
+// colateral fiscal do motor (nao so antes da gravacao final) - em
+// FATZZC01.prw isso significa antes de U_PI_GERAPC_X, nao so antes de
+// U_PI_GERANF_X: cLeg (parametro do GERAPC) e so referencia informativa
+// (C7_OBS/C7_LEGADO, confirmado nao afeta numeracao fiscal), mas se a
+// numeracao/duplicidade so fosse checada depois do GERAPC, uma nota
+// duplicada em retry criaria um pedido de compra (SC7) novo antes de ser
+// barrada - regressao em relacao ao comportamento original, onde a
+// duplicidade era checada antes de QUALQUER chamada de motor.
+//
+// Retorno: {lOk, cNF, lDuplicado}
+//   lOk == .T. e lDuplicado == .T. -> nota ja processada, cNF = numero ja
+//     existente (quem chama decide o que fazer - tratar como sucesso sem
+//     gravar de novo, nao como erro).
+// ==========================================================================
+User Function PI_NUMERA_X(cTabFis, cCampoDoc, cSer, cCod, cLoja, cNumInformado)
+	Local cNF          := ""
+	Local cQryAux      := ""
+	Local cAliAux      := ""
+	Local cPrefixo     := Left(cCampoDoc, 2)
+	Local cCampoCliFor := IIF(cPrefixo == "F2", "F2_CLIENTE", "F1_FORNECE")
+	Local cCampoLoja   := cPrefixo + "_LOJA"
+	Local cCampoSer    := cPrefixo + "_SERIE"
+
+	Default cNumInformado := ""
+
+	If !Empty(cNumInformado)
+		cNF := PadL(AllTrim(cNumInformado), TamSx3(cCampoDoc)[1], "0")
+	Else
+		cNF := GetSxeNum(cTabFis, cCampoDoc)
+		While .T.
+			cQryAux := "SELECT " + cCampoDoc + " FROM " + RetSqlName(cTabFis) + " WHERE " + cCampoDoc + " = '" + PadL(AllTrim(cNF), TamSx3(cCampoDoc)[1], "0") + "' AND D_E_L_E_T_ = ' '"
+			cAliAux := GetNextAlias()
+			MpSysOpenQuery(cQryAux, cAliAux)
+			If (cAliAux)->(Eof())
+				(cAliAux)->(DbCloseArea())
+				Exit
+			EndIf
+			(cAliAux)->(DbCloseArea())
+			cNF := Soma1(cNF)
+		EndDo
+		ConfirmSx8()
+		cNF := PadL(AllTrim(cNF), TamSx3(cCampoDoc)[1], "0")
+	EndIf
+
+	// Duplicidade real - mesma query que existia dentro do ZZ901_Classifica,
+	// agora generica por SF2 (Saida/NFCe) ou SF1 (Devolucao/Entrada).
+	cQryAux := "SELECT " + cCampoDoc + " FROM " + RetSqlName(cTabFis) + " WHERE " + cCampoDoc + " = '" + cNF + "' AND " + cCampoSer + " = '" + cSer + "' AND " + cCampoCliFor + " = '" + cCod + "' AND " + cCampoLoja + " = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
+	cAliAux := GetNextAlias()
+	MpSysOpenQuery(cQryAux, cAliAux)
+	If (cAliAux)->(!Eof())
+		(cAliAux)->(DbCloseArea())
+		Return {.T., cNF, .T.}
+	EndIf
+	(cAliAux)->(DbCloseArea())
+
+	// [REV2-EXTRACAO-NFCE] Limpeza SFT/SF3 - movida de ZZ901_Classifica, so
+	// fazia sentido junto do numero definitivo (antes rodava logo apos a
+	// checagem de duplicidade, mesmo lugar relativo aqui).
+	cQryAux := "UPDATE " + RetSqlName("SFT") + " SET D_E_L_E_T_ = '*', R_E_C_D_E_L_ = R_E_C_N_O_ WHERE FT_NFISCAL = '" + cNF + "' AND FT_SERIE = '" + cSer + "' AND FT_CLIEFOR = '" + cCod + "' AND FT_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
+	TCSqlExec(cQryAux)
+	cQryAux := "UPDATE " + RetSqlName("SF3") + " SET D_E_L_E_T_ = '*', R_E_C_D_E_L_ = R_E_C_N_O_ WHERE F3_NFISCAL = '" + cNF + "' AND F3_SERIE = '" + cSer + "' AND F3_CLIEFOR = '" + cCod + "' AND F3_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
+	TCSqlExec(cQryAux)
+
+Return {.T., cNF, .F.}

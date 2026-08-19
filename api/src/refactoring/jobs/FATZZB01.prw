@@ -33,6 +33,7 @@ User Function FATZZB01()
     Local cSub     := ""
     Local cFilCb   := ""
     Local cDocCb   := ""
+    Local cMsgSuc  := ""
     Local nRecno   := 0
     Local lOk      := .F.
     Local nOk      := 0
@@ -64,6 +65,7 @@ User Function FATZZB01()
         cSub    := ""
         cFilCb  := ""
         cDocCb  := ""
+        cMsgSuc := ""
         lOk     := .F.
 
         // Reposiciona na area nativa ZZB so pra ler o memo certo
@@ -82,6 +84,12 @@ User Function FATZZB01()
             If lOk
                 cFilCb := IIF(Len(aRet) >= 5, cValToChar(aRet[4]), "")
                 cDocCb := IIF(Len(aRet) >= 5, cValToChar(aRet[5]), "")
+                // [FIX-MSG-DUPLICIDADE] Jose Carlos - Artiq - 08/2026
+                // aRet[2] (mensagem descritiva do motor - inclui "Ja
+                // processada anteriormente: ..." no caso de duplicidade,
+                // pedido do Arthur) antes se perdia aqui, nunca chegava no
+                // callback. Repassado como cMsgCustom (8o parametro).
+                cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else
                 cErrMsg := cValToChar(aRet[2])
             EndIf
@@ -92,7 +100,7 @@ User Function FATZZB01()
 
         If lOk
             U_UPDSTAT("ZZB", cCod, "S", "")
-            U_ZZCALLBK("ZZB", cChvNFe, cSub, .T., cFilCb, cDocCb, "")
+            U_ZZCALLBK("ZZB", cChvNFe, cSub, .T., cFilCb, cDocCb, "", cMsgSuc)
             nOk++
             ConOut("[FATZZB01] OK: " + cCod)
         Else
@@ -116,7 +124,11 @@ Static Function ZZB_MotorDevolucao(jJson)
     Local aPrd  := {}
     Local aEmp  := {}
     Local aRet  := {.F., ""}
+    Local aNum  := {}
     Local cSub  := ""
+    Local nValNF  := 0
+    Local cNumInf := ""
+    Local cNF     := ""
 
     Private lMsErroAuto := .F. ; Private lAutoErrNoFile := .T.
 
@@ -128,14 +140,28 @@ Static Function ZZB_MotorDevolucao(jJson)
     If Len(aEmp) < 2 ; Return {.F., "Filial nao encontrada (ZZB/NFD)", cSub} ; EndIf
     If aEmp[1] != cEmpAnt .Or. aEmp[2] != cFilAnt ; RpcClearEnv() ; RpcSetEnv(aEmp[1], aEmp[2], Nil, Nil, "FAT") ; EndIf
 
+    // [MOVIDO-ZZ901] Jose Carlos - Artiq - 08/2026
+    // Numeracao migrou do classificador pra ca - ver
+    // instrucao_mover_numeracao_para_jobs.md. Devolucao usa SF1/F1_DOC.
+    // Preserva o desvio de numero pre-informado (num_NF/num_NotaFiscal/
+    // cod_ReciboVenda), mesmo comportamento de antes.
+    nValNF := U_PI_VAL_X(oHead, 'num_NF', 'num_NotaFiscal')
+    If nValNF == 0 ; nValNF := U_PI_VAL_X(oHead, 'cod_ReciboVenda') ; EndIf
+    cNumInf := IIF(nValNF == 0, "", cValToChar(nValNF))
+
+    aNum := U_PI_NUMERA_X("SF1", "F1_DOC", AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), cNumInf)
+    If !aNum[1] ; Return {.F., "NUMERACAO: " + cValToChar(aNum[2]), cSub} ; EndIf
+    If aNum[3] ; Return {.T., "Ja processada anteriormente: " + cValToChar(aNum[2]), cSub, xFilial("SF1"), cValToChar(aNum[2])} ; EndIf
+    cNF := cValToChar(aNum[2])
+
     U_PI_SETFCA(AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), AllTrim(U_PI_STR_X(oHead,'_COND')), oHead)
 
-    aRet := U_PI_DEVOL_X(aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), AllTrim(U_PI_STR_X(oHead,'_NF')), AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_FIL')), 0, AllTrim(U_PI_STR_X(oHead,'_COND')))
+    aRet := U_PI_DEVOL_X(aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_FIL')), 0, AllTrim(U_PI_STR_X(oHead,'_COND')))
 
     If aRet[1]
         // [REV2-FIX] JSON_COMPRA agora e User Function (promovida em FATPI01E.prw),
         // por isso pode ser chamada aqui sem redeclaracao local.
-        U_JSON_COMPRA(AllTrim(U_PI_STR_X(oHead,'_NF')), AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_TAB')))
+        U_JSON_COMPRA(cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_TAB')))
         Return {.T., "NFD: " + xFilial("SF1") + " - " + cValToChar(aRet[2]), cSub, xFilial("SF1"), cValToChar(aRet[2])}
     EndIf
 Return {.F., IIF(aRet[3],"NFORIGEM","MATA103_DEV") + ": " + cValToChar(aRet[2]), cSub}

@@ -82,7 +82,7 @@ Static Function DoPost(oSelf)
 
 		If !Empty(cVLeg) .And. !CheckLeg(cVLeg)
 			oSelf:SetStatus(200)
-			oResp["erro"]     := "Cliente"
+			oResp["Resultado"]:= "Sucesso"
 			oResp["mensagem"] := "Cliente ja cadastrado: " + cVLeg
 			Break
 		EndIf
@@ -117,8 +117,12 @@ Static Function DoPost(oSelf)
 		oSA1Mod:SetValue("A1_TEL"    , GetJ(oJson, "telefone"))
 		oSA1Mod:SetValue("A1_EMAIL"  , Lower(GetJ(oJson, "email")))
 		oSA1Mod:SetValue("A1_TIPO"   , "F")
-		oSA1Mod:SetValue("A1_PESSOA" , "F")
-		//oSA1Mod:SetValue("A1_SEXO"   , Upper(GetJ(oJson, "sexo")))
+		If LEN(GetJ(oJson, "cpf")) = 11
+			oSA1Mod:SetValue("A1_PESSOA" , "F")
+		ELSEIF LEN(GetJ(oJson, "cpf")) = 14
+			oSA1Mod:SetValue("A1_PESSOA" , "J")
+		ENDIF
+		oSA1Mod:SetValue("A1_COD_MUN", GetJ(oJson, "cod_Municipio"))
 		oSA1Mod:SetValue("A1_LEGADO" , cVLeg)
 
 		If !Empty(GetJ(oJson, "cod_ibge"))

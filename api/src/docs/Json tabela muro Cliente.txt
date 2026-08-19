@@ -1,0 +1,23 @@
+{
+  "tp_Participante": "CLI",
+  "codigo": "ADV,269577-1,0",
+  "tipoDeUsuario": "ADV",
+  "tpo_Funcionario": null,
+  "cod_RH": null,
+  "nome": "MARCO AURÉLIO SERIZAWA YAMANAKA",
+  "sexo": "M",
+  "cpf": "06741913823",
+  "cnpj": null,
+  "endereco": "AVENIDA MIGUEL DAMHA 1515",
+  "bairro": "RESIDENCIAL GAIVOTA I",
+  "municipio": "SÃO JOSÉ DO RIO PRETO",
+  "cod_Municipio": "49805",
+  "cod_mun": "50308",
+  "estado": "SP",
+  "cep": "15063000",
+  "ddd": 18,
+  "telefone": "997248889",
+  "email": "marcoaureliosyadv@hotmail.com",
+  "dataAlteracao": null,
+  "nr_CodigoCadastro": 151110
+}

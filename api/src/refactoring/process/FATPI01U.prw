@@ -376,8 +376,23 @@ User Function PI_CLI_X(oJson)
         oSA1Mod:SetValue("A1_TEL"    , U_PI_STR_X(oJson, "telefone"))
         oSA1Mod:SetValue("A1_EMAIL"  , Lower(U_PI_STR_X(oJson, "email")))
         oSA1Mod:SetValue("A1_TIPO"   , "F")
-        oSA1Mod:SetValue("A1_PESSOA" , "F")
+        // [FIX-SYNC-PICLI] Jose Carlos - Artiq - 08/2026
+        // A1_PESSOA fixo em "F" era divergente do FATPI06.prw ja corrigido
+        // contra payload real do Arthur (Json tabela muro Cliente.txt) -
+        // ver instrucao_sync_pi_cli_forn.md, item 1.2. F/J por tamanho do
+        // documento (CPF 11 digitos / CNPJ 14).
+        If Len(U_PI_STR_X(oJson, "cpf")) = 11
+            oSA1Mod:SetValue("A1_PESSOA" , "F")
+        ElseIf Len(U_PI_STR_X(oJson, "cpf")) = 14
+            oSA1Mod:SetValue("A1_PESSOA" , "J")
+        EndIf
         oSA1Mod:SetValue("A1_LEGADO" , cVLeg)
+
+        // [FIX-SYNC-PICLI] Jose Carlos - Artiq - 08/2026
+        // A1_COD_MUN sem default de cod_Municipio era divergente do
+        // FATPI06.prw ja corrigido - ver instrucao_sync_pi_cli_forn.md,
+        // item 1.1. Default primeiro, cod_ibge sobrescreve se vier.
+        oSA1Mod:SetValue("A1_COD_MUN", U_PI_STR_X(oJson, "cod_Municipio"))
 
         If !Empty(U_PI_STR_X(oJson, "cod_ibge"))
             oSA1Mod:SetValue("A1_COD_MUN", U_PI_STR_X(oJson, "cod_ibge"))
@@ -470,6 +485,12 @@ User Function PI_FORN_X(jItem)
     oModel:SetValue("SA2MASTER", "A2_EST" , Upper(AllTrim(cValToChar(jItem["cod_UF"]))))
     oModel:SetValue("SA2MASTER", "A2_MUN" , Left(cMun, 30))
     oModel:SetValue("SA2MASTER", "A2_CEP" , StrTran(cValToChar(jItem["num_CEP"]), "-", ""))
+    // [FIX-SYNC-PIFORN] Jose Carlos - Artiq - 08/2026
+    // A2_COD_MUN/A2_CODPAIS ausentes - divergente do FATPI03.PRW ja
+    // corrigido contra payload real do Arthur (Json tabela muro
+    // Fornecedor.txt) - ver instrucao_sync_pi_cli_forn.md, item 2.2.
+    oModel:SetValue("SA2MASTER", "A2_COD_MUN", AllTrim(cValToChar(jItem["cod_IBGE"])))
+    oModel:SetValue("SA2MASTER", "A2_CODPAIS", cValToChar(jItem["cod_pais"]))
 
     oModel:SetValue("SA2MASTER", "A2_END"   , Left(cValToChar(jItem["nom_Logradouro"]), 40))
     oModel:SetValue("SA2MASTER", "A2_BAIRRO", Left(cValToChar(jItem["nom_Bairro"]), 30))
@@ -477,7 +498,12 @@ User Function PI_FORN_X(jItem)
 
     oModel:SetValue("SA2MASTER", "A2_BANCO"  , cValToChar(jItem["cod_Banco"]))
     oModel:SetValue("SA2MASTER", "A2_AGENCIA", cValToChar(jItem["num_Agencia"]))
-    oModel:SetValue("SA2MASTER", "A2_NUMCON" , cValToChar(jItem["num_ContaCorrente"]))
+    // [FIX-SYNC-PIFORN] Jose Carlos - Artiq - 08/2026
+    // A2_NUMCON lia num_ContaCorrente (campo errado) - divergente do
+    // FATPI03.PRW ja corrigido - ver instrucao_sync_pi_cli_forn.md, item
+    // 2.1. A2_DVCTA (digito) tambem ausente - item 2.2.
+    oModel:SetValue("SA2MASTER", "A2_NUMCON" , cValToChar(jItem["num_Conta"]))
+    oModel:SetValue("SA2MASTER", "A2_DVCTA"  , cValToChar(jItem["num_ContaDig"]))
 
     oModel:SetValue("SA2MASTER", "A2_RISCO" , "A")
     oModel:SetValue("SA2MASTER", "A2_MSBLQL", IIF(Upper(cValToChar(jItem["flg_Ativo"])) == "S", "2", "1"))

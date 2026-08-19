@@ -133,14 +133,17 @@ WSMETHOD POST NEW WSRECEIVE WSSERVICE FATPI03
 			oModel:SetValue("SA2MASTER", "A2_CEP" , StrTran(cValToChar(jItem["num_CEP"]), "-", ""))
 
 			// --- BLOCO: ENDERECO E CONTATO ---
-			oModel:SetValue("SA2MASTER", "A2_END"   , Left(cValToChar(jItem["nom_Logradouro"]), 40))
-			oModel:SetValue("SA2MASTER", "A2_BAIRRO", Left(cValToChar(jItem["nom_Bairro"]), 30))
-			oModel:SetValue("SA2MASTER", "A2_INSCR" , AllTrim(cValToChar(jItem["num_InscricaoEstadual"])))
+			oModel:SetValue("SA2MASTER", "A2_END"     , Left(cValToChar(jItem["nom_Logradouro"]), 40))
+			oModel:SetValue("SA2MASTER", "A2_BAIRRO"  , Left(cValToChar(jItem["nom_Bairro"]), 30))
+			oModel:SetValue("SA2MASTER", "A2_INSCR"   , AllTrim(cValToChar(jItem["num_InscricaoEstadual"])))
+			oModel:SetValue("SA2MASTER", "A2_COD_MUN" , AllTrim(cValToChar(jItem["cod_IBGE"])))
 
 			// --- BLOCO: DADOS BANCARIOS ---
 			oModel:SetValue("SA2MASTER", "A2_BANCO"  , cValToChar(jItem["cod_Banco"]))
 			oModel:SetValue("SA2MASTER", "A2_AGENCIA", cValToChar(jItem["num_Agencia"]))
-			oModel:SetValue("SA2MASTER", "A2_NUMCON" , cValToChar(jItem["num_ContaCorrente"]))
+			oModel:SetValue("SA2MASTER", "A2_NUMCON" , cValToChar(jItem["num_Conta"]))
+			oModel:SetValue("SA2MASTER", "A2_DVCTA"  , cValToChar(jItem["num_ContaDig"]))
+			oModel:SetValue("SA2MASTER", "A2_CODPAIS", cValToChar(jItem["cod_pais"]))
 
 			// --- BLOCO: FINANCEIRO / STATUS ---
 			oModel:SetValue("SA2MASTER", "A2_RISCO" , "A")

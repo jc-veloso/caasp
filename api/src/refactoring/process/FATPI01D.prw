@@ -205,11 +205,11 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 
 		IF !Empty(cNotaOri)
 		   IF lDevol
-	          lDevol := FZ_VALID_DEV(cChaveOri,cNotaOri,'V')
+	          lDevol := U_FZ_VALID_DEV(cChaveOri,cNotaOri,'V')
 		   Endif
 		ENDIF
 
-        cOper := RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST'])
+        cOper := U_RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST'])
 
         aLin := {}
         AAdd(aLin, {"D1_FILIAL", xFilial("SD1"), Nil})
@@ -366,7 +366,20 @@ Return aRet
 | Descritivo: Funcao de Apoio (Extracao Anti-Leak JsonObject em Escadinha)   |
 +----------------------------------------------------------------------------+
 */
-Static Function FZ_VALID_DEV(cChave,cNota,cTipo)
+// [FIX-LOTE-COMPILACAO] Jose Carlos - Artiq - 08/2026
+// Promovida de Static Function pra User Function - mesmo problema achado
+// e corrigido em RetOpera (FATPI01S.prw -> FATPI01D.prw/E.prw), so na
+// direcao contraria aqui: FATPI01S.prw chama FZ_VALID_DEV(cChaveOri,
+// cNotaOri,'C') dentro de U_PI_SAIDA_X (linha ~934, caminho real -
+// devolucao referenciada numa nota de Saida), mas so existia definicao
+// Static local aqui em FATPI01D.prw (lote de compilacao diferente).
+// Nunca reportado em teste porque exige cTipoOper=='D' com cNotaOri
+// preenchido - caminho menos comum, mas alcancavel em producao. Chamador
+// em FATPI01S.prw atualizado de FZ_VALID_DEV(...) pra U_FZ_VALID_DEV(...);
+// chamada local aqui embaixo tambem atualizada por consistencia (mesmo
+// padrao ja usado em todo o codebase - U_UPDSTAT etc. chamados com
+// prefixo U_ mesmo de dentro do proprio arquivo que os define).
+User Function FZ_VALID_DEV(cChave,cNota,cTipo)
 
 	Local cNewSF1 := GetNextAlias()
 	Local cNewSF2 := GetNextAlias()

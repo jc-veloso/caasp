@@ -69,6 +69,7 @@ User Function FATZZD01()
     Local cSub     := ""
     Local cFilCb   := ""
     Local cDocCb   := ""
+    Local cMsgSuc  := ""
     Local nRecno   := 0
     Local lOk      := .F.
     Local nOk      := 0
@@ -136,6 +137,7 @@ User Function FATZZD01()
         cSub    := ""
         cFilCb  := ""
         cDocCb  := ""
+        cMsgSuc := ""
         lOk     := .F.
 
         // Reposiciona na area nativa ZZD so pra ler o memo certo
@@ -156,6 +158,12 @@ User Function FATZZD01()
             If lOk
                 cFilCb := IIF(Len(aRet) >= 5, cValToChar(aRet[4]), "")
                 cDocCb := IIF(Len(aRet) >= 5, cValToChar(aRet[5]), "")
+                // [FIX-MSG-DUPLICIDADE] Jose Carlos - Artiq - 08/2026
+                // aRet[2] (mensagem descritiva do motor - inclui "Ja
+                // processada anteriormente: ..." no caso de duplicidade,
+                // pedido do Arthur, vale igual pra NFCe) antes se perdia
+                // aqui. Repassado como cMsgCustom (8o parametro).
+                cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else
                 cErrMsg := cValToChar(aRet[2])
             EndIf
@@ -167,7 +175,7 @@ User Function FATZZD01()
         If lOk
             U_UPDSTAT("ZZD", cCod, "S", "")
             nTIni := Seconds()
-            U_ZZCALLBK("ZZD", cChvNFe, cSub, .T., cFilCb, cDocCb, "")
+            U_ZZCALLBK("ZZD", cChvNFe, cSub, .T., cFilCb, cDocCb, "", cMsgSuc)
             ConOut("[TIMING][FATZZD01] Callback iPaaS: " + cValToChar(Seconds() - nTIni) + "s | " + cCod)
             nOk++
             ConOut("[FATZZD01] OK: " + cCod)
@@ -216,6 +224,7 @@ Static Function ZZD_MotorNFCe(jJson)
     Local nValNF       := 0
     Local cNF          := ""
     Local cSer         := ""
+    Local aNum         := {}
     Local nI           := 0
     Local cProdLeg     := ""
     Local cProdInt     := ""
@@ -274,43 +283,25 @@ Static Function ZZD_MotorNFCe(jJson)
 
     // --- NUMERACAO E DUPLICIDADE REAL (contra SF2) ---
     // [MOTOR-FATURAMENTO] Jose Carlos - Artiq - 08/2026
-    // NFCe passou a morar no Faturamento (U_PI_SAIDA_X/SF2, ver Parte 1 do
-    // instrucao_nfce_motor_faturamento.md) igual NFe Saida - deixou de
-    // existir o numero proprio que LOJA701/GetSxeNum("SL1","L1_NUM") gerava
-    // sozinho. Mesmo padrao de numeracao + duplicidade real ja usado em
-    // ZZ901_Classifica (FATZZ901.prw), adaptado: cOper e sempre "S" aqui
-    // (NFCe e sempre saida), nao precisa do Do Case que a NFe tem.
+    // NFCe passou a morar no Faturamento (U_PI_SAIDA_X/SF2) igual NFe
+    // Saida - deixou de existir o numero proprio que LOJA701/
+    // GetSxeNum("SL1","L1_NUM") gerava sozinho.
+    // [CONSOLIDACAO-NUMERA] Jose Carlos - Artiq - 08/2026
+    // Numeracao propria (GetSxeNum + loop de disponibilidade + duplicidade)
+    // trocada por U_PI_NUMERA_X (FATPI01U.prw) - mesma funcao que
+    // FATZZA01/B01/C01 agora usam (ver
+    // instrucao_mover_numeracao_para_jobs.md/_2.md, Parte 4 - consolidacao
+    // oportuna, nao bloqueante, feita nesta rodada por estarmos mexendo
+    // aqui de qualquer jeito). Ganha de brinde a limpeza SFT/SF3 que este
+    // motor nunca teve (FATZZA01/NFe Saida ja tinha). Mensagem de
+    // duplicidade padronizada pro mesmo formato usado pelas outras filas
+    // ("Ja processada anteriormente: " + cNF) - pedido do Arthur de
+    // mensagem explicita vale igual pra NFCe, nao so NFe.
     nValNF := U_PI_VAL_X(oData, 'num_NF', 'num_NotaFiscal')
-    If nValNF == 0
-        cNF := GetSxeNum("SF2", "F2_DOC")
-        While .T.
-            cQryAux := "SELECT F2_DOC FROM " + RetSqlName("SF2") + " WHERE F2_DOC = '" + PadL(AllTrim(cNF), TamSx3("F2_DOC")[1], "0") + "' AND D_E_L_E_T_ = ' '"
-            cAliAux := GetNextAlias()
-            MpSysOpenQuery(cQryAux, cAliAux)
-            If (cAliAux)->(Eof())
-                (cAliAux)->(DbCloseArea())
-                Exit
-            EndIf
-            (cAliAux)->(DbCloseArea())
-            cNF := Soma1(cNF)
-        EndDo
-        ConfirmSx8()
-        cNF := PadL(AllTrim(cNF), TamSx3("F2_DOC")[1], "0")
-    Else
-        cNF := PadL(AllTrim(cValToChar(nValNF)), TamSx3("F2_DOC")[1], "0")
-    EndIf
-
-    // Duplicidade real - nota ja processada anteriormente (SF2). Antes nao
-    // existia esse risco (SL1 e uma tabela diferente da NFe); agora que
-    // passa a escrever em SF2, o mesmo risco de duplicidade da NFe existe.
-    cQryAux := "SELECT F2_DOC FROM " + RetSqlName("SF2") + " WHERE F2_DOC = '" + cNF + "' AND F2_SERIE = '" + cSer + "' AND F2_CLIENTE = '" + cCod + "' AND F2_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
-    cAliAux := GetNextAlias()
-    MpSysOpenQuery(cQryAux, cAliAux)
-    If (cAliAux)->(!Eof())
-        (cAliAux)->(DbCloseArea())
-        Return {.T., "NFCe: " + xFilial("SF2") + " - " + cNF + " (ja processada anteriormente)", cSub, xFilial("SF2"), cNF}
-    EndIf
-    (cAliAux)->(DbCloseArea())
+    aNum := U_PI_NUMERA_X("SF2", "F2_DOC", cSer, cCod, cLoja, IIF(nValNF == 0, "", cValToChar(nValNF)))
+    If !aNum[1] ; Return {.F., "NUMERACAO: " + cValToChar(aNum[2]), cSub} ; EndIf
+    If aNum[3] ; Return {.T., "Ja processada anteriormente: " + cValToChar(aNum[2]), cSub, xFilial("SF2"), cValToChar(aNum[2])} ; EndIf
+    cNF := cValToChar(aNum[2])
 
     // Validacao previa de serie (SX5) - mesma protecao que a NFe ja tem
     // (ZZ901_Classifica, bloco cOper == "S") contra o erro fatal do

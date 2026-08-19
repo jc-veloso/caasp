@@ -136,10 +136,12 @@ User Function FATZZ901()
             U_UPDSTAT("ZZ9", cCod, "S", "")
             If !Empty(cTabPai)
                 // [FIX-DESTMU-FILIAL] cFilOri (capturada da propria linha
-                // lida, antes de ZZ901_Classifica poder trocar de ambiente
-                // via RpcSetEnv) - xFilial("ZZ9") aqui avaliaria a filial
-                // JA TROCADA, nao batendo com a linha lida pela query
-                // principal (ver 2.5.2).
+                // lida) usada em vez de xFilial("ZZ9") por seguranca - nao
+                // muda mais nada na pratica desde que ZZ901_Classifica
+                // parou de trocar de ambiente ([MOVIDO-ZZ901], ver
+                // instrucao_mover_numeracao_para_jobs.md), mas mantido:
+                // reflete exatamente a filial da linha que a query
+                // principal leu, sem depender de nenhum estado de ambiente.
                 TCSqlExec("UPDATE " + RetSqlName("ZZ9") + " SET ZZ9_DESTMU = '" + cTabPai + "' WHERE ZZ9_COD = '" + cCod + "' AND ZZ9_FILIAL = '" + cFilOri + "' AND D_E_L_E_T_ = ' '")
             EndIf
             nOk++
@@ -214,7 +216,6 @@ Static Function ZZ901_Classifica(jJson)
     Local aEmp         := {}
     Local cSub         := ""
     Local cCnpj        := ""
-    Local cNF          := ""
     Local cSer         := ""
     Local cOper        := ""
     Local cTab         := ""
@@ -224,7 +225,6 @@ Static Function ZZ901_Classifica(jJson)
     Local cCliD        := "000001"
     Local dVencto      := CToD("//")
     Local cCondSafe    := ""
-    Local cLeg         := ""
     Local nI           := 0
     Local cQryAux      := ""
     Local cAliAux      := ""
@@ -236,7 +236,6 @@ Static Function ZZ901_Classifica(jJson)
     Local lIsTransf    := .F.
     Local oMotorRegras := Nil
     Local aRetCfop     := {}
-    Local nValNF       := 0
     Local cNatOp       := ""
     Local cCnpjEmit    := ""
     Local cCnpjDest    := ""
@@ -278,10 +277,16 @@ Static Function ZZ901_Classifica(jJson)
         Return {.F., "Filial nao encontrada para CNPJ: " + AllTrim(cCnpj), cSub}
     EndIf
 
-    If aEmp[1] != cEmpAnt .Or. aEmp[2] != cFilAnt
-        RpcClearEnv()
-        RpcSetEnv(aEmp[1], aEmp[2], Nil, Nil, "FAT")
-    EndIf
+    // [MOVIDO-ZZ901] Jose Carlos - Artiq - 08/2026
+    // Troca de ambiente REMOVIDA - era o bug (ZZ901_Classifica trocava pra
+    // filial real e nunca voltava antes de gravar via U_ZZX_Gravar, que usa
+    // xFilial() e refletia a filial ja trocada - ZZA/ZZC gravavam com
+    // filial errada). SA1/SA2/SF4/SX5 (tudo usado daqui pra baixo) sao
+    // cadastro compartilhado entre filiais - nao precisam da filial real.
+    // A unica coisa que precisava mesmo da filial real era numeracao
+    // (GetSxeNum/SX8) e gravacao fiscal final - ambas migraram pros Jobs de
+    // destino (FATZZA01/B01/C01), que ja trocam de ambiente antes de chamar
+    // o motor. Ver instrucao_mover_numeracao_para_jobs.md.
 
     // --- ROTEAMENTO FISCAL (SA1 vs SA2 E CONTRAPARTE) ---
     dVencto := U_PI_DATA_X(U_PI_STR_X(oHead, 'dta_Emissao', 'dta_Vencimento'))
@@ -397,59 +402,16 @@ Static Function ZZ901_Classifica(jJson)
         Otherwise          ; cTabPai := "ZZC"
     EndCase
 
-    // --- NUMERACAO E DUPLICIDADE REAL (contra SF2/SF1, ja classificada) ---
-    nValNF := U_PI_VAL_X(oHead, 'num_NF', 'num_NotaFiscal')
-    If nValNF == 0
-        nValNF := U_PI_VAL_X(oHead, 'cod_ReciboVenda')
-    EndIf
-
-    If nValNF == 0
-        cNF := GetSxeNum("SF2", "F2_DOC")
-        While .T.
-            cQryAux := "SELECT F2_DOC FROM " + RetSqlName("SF2") + " WHERE F2_DOC = '" + PadL(AllTrim(cNF), TamSx3("F2_DOC")[1], "0") + "' AND D_E_L_E_T_ = ' '"
-            cAliAux := GetNextAlias()
-            MpSysOpenQuery(cQryAux, cAliAux)
-            If (cAliAux)->(Eof())
-                (cAliAux)->(DbCloseArea())
-                Exit
-            EndIf
-            (cAliAux)->(DbCloseArea())
-            cNF := Soma1(cNF)
-        EndDo
-        ConfirmSx8()
-        cNF := PadL(AllTrim(cNF), TamSx3("F2_DOC")[1], "0")
-    Else
-        cNF := PadL(AllTrim(cValToChar(nValNF)), TamSx3("F2_DOC")[1], "0")
-    EndIf
-
+    // [MOVIDO-ZZ901] Numeracao real (GetSxeNum/duplicidade contra SF2/SF1/
+    // limpeza SFT-SF3) migrou pra U_PI_NUMERA_X, chamada dentro de cada Job
+    // de destino (FATZZA01/B01/C01) - so la o ambiente ja esta trocado pra
+    // filial real. Serie continua sendo resolvida aqui (cadastro,
+    // compartilhado entre filiais - so filtro/fallback, nao gera nada).
     cSer := AllTrim(U_PI_STR_X(oHead, 'cod_Serie', 'num_Serie'))
     If Empty(cSer)
         cSer := "1"
     EndIf
     cSer := PadR(cSer, TamSx3("F2_SERIE")[1], " ")
-    cLeg := cNF
-
-    If cOper == "S"
-        cQryAux := "SELECT F2_DOC FROM " + RetSqlName("SF2") + " WHERE F2_DOC = '" + cNF + "' AND F2_SERIE = '" + cSer + "' AND F2_CLIENTE = '" + cCod + "' AND F2_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
-    Else
-        cQryAux := "SELECT F1_DOC FROM " + RetSqlName("SF1") + " WHERE F1_DOC = '" + cNF + "' AND F1_SERIE = '" + cSer + "' AND F1_FORNECE = '" + cCod + "' AND F1_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
-    EndIf
-
-    cAliAux := GetNextAlias()
-    MpSysOpenQuery(cQryAux, cAliAux)
-    If (cAliAux)->(!Eof())
-        (cAliAux)->(DbCloseArea())
-        // Nota ja processada anteriormente (SF2/SF1) - nao regrava em
-        // ZZA/ZZB/ZZC, so marca a ZZ9 como classificada (ver lDup no loop).
-        Return {.T., "", cTabPai, .T.}
-    EndIf
-    (cAliAux)->(DbCloseArea())
-
-    // [REV2-EXTRACAO-NFCE] Limpeza SFT/SF3 - sempre aplicavel (NFCe nunca chega aqui)
-    cQryAux := "UPDATE " + RetSqlName("SFT") + " SET D_E_L_E_T_ = '*', R_E_C_D_E_L_ = R_E_C_N_O_ WHERE FT_NFISCAL = '" + cNF + "' AND FT_SERIE = '" + cSer + "' AND FT_CLIEFOR = '" + cCod + "' AND FT_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
-    TCSqlExec(cQryAux)
-    cQryAux := "UPDATE " + RetSqlName("SF3") + " SET D_E_L_E_T_ = '*', R_E_C_D_E_L_ = R_E_C_N_O_ WHERE F3_NFISCAL = '" + cNF + "' AND F3_SERIE = '" + cSer + "' AND F3_CLIEFOR = '" + cCod + "' AND F3_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
-    TCSqlExec(cQryAux)
 
     For nI := 1 To Len(aPrd)
         cProdLeg := AllTrim(U_PI_STR_X(aPrd[nI], 'cod_Produto'))
@@ -544,11 +506,12 @@ Static Function ZZ901_Classifica(jJson)
     // [FIX-MOTOR-2X] Enriquece o oHead com os campos sinteticos que os
     // Jobs finais (FATZZA01/B01/C01) precisam pra rodar o motor sozinhos -
     // mesma logica que ja existia no FATPI01_V2.prw antes da migracao pra ZZ9.
+    // [MOVIDO-ZZ901] _NF/_LEG removidos daqui - numeracao real (e o cLeg
+    // que sempre foi igual a ela) agora e resolvida dentro de cada Job via
+    // U_PI_NUMERA_X, no ambiente ja trocado pra filial real.
     oHead['_COD']      := cCod
     oHead['_LOJA']     := cLoja
-    oHead['_NF']       := cNF
     oHead['_SER']      := cSer
-    oHead['_LEG']      := cLeg
     oHead['_FIL']      := cFil
     oHead['_TAB']      := cTab
     oHead['_TRANSF']   := IIF(lIsTransf, "S", "N")

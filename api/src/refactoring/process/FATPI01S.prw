@@ -74,7 +74,15 @@ Return
 // ==========================================================================
 // COMPRAS (ENTRADAS) - MOTOR MATA120
 // ==========================================================================
-Static Function GET_REC_JSON(oHead, cCampoReq, cCampoPag, nVlrFall)
+// [FIX-LOTE-COMPILACAO] Jose Carlos - Artiq - 08/2026
+// Promovida de Static Function pra User Function - mesma classe de bug
+// ja corrigida em RetOpera/FZ_VALID_DEV: era so visivel dentro de
+// FATPI01S.prw, mas U_JSON_COMPRA (FATPI01E.prw) tambem chama - erro
+// reproduzido em teste real ("cannot find function GET_REC_JSON in
+// AppMap" em U_JSON_COMPRA). Chamadores atualizados de GET_REC_JSON(...)
+// pra U_GET_REC_JSON(...), inclusive os locais aqui embaixo (mesmo
+// padrao ja usado em todo o codebase).
+User Function GET_REC_JSON(oHead, cCampoReq, cCampoPag, nVlrFall)
 	// --- 1. DECLARACAO DE VARIAVEIS ---
 	Local cRet    := ""
 	Local oItm    := Nil
@@ -229,13 +237,13 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 	Local cNewSFT     := GetNextAlias()
 
 	// --- 2. LOGICA DE PROCESSAMENTO ---
-	cNatItm     := GET_REC_JSON(oHead, "cod_NaturezaFinanceira", "", "")
-	cCCItm      := GET_REC_JSON(oHead, "cod_CentroCusto", "", "")
-	cFormaRec   := GET_REC_JSON(oHead, "des_FormaRecebimento", "des_FormaPagamento", "")
-	cBandeira   := GET_REC_JSON(oHead, "des_Bandeira", "", "")
-	cTransac    := GET_REC_JSON(oHead, "num_Transacao", "", "")
-	cAutorizF   := GET_REC_JSON(oHead, "des_Autorizacao", "", "")
-	nVlrTitulo  := GET_REC_JSON(oHead, "VLR", "", nVlrBrutV)
+	cNatItm     := U_GET_REC_JSON(oHead, "cod_NaturezaFinanceira", "", "")
+	cCCItm      := U_GET_REC_JSON(oHead, "cod_CentroCusto", "", "")
+	cFormaRec   := U_GET_REC_JSON(oHead, "des_FormaRecebimento", "des_FormaPagamento", "")
+	cBandeira   := U_GET_REC_JSON(oHead, "des_Bandeira", "", "")
+	cTransac    := U_GET_REC_JSON(oHead, "num_Transacao", "", "")
+	cAutorizF   := U_GET_REC_JSON(oHead, "des_Autorizacao", "", "")
+	nVlrTitulo  := U_GET_REC_JSON(oHead, "VLR", "", nVlrBrutV)
 
 	/*cCnpjU  := U_PI_LIMPA_X(U_PI_STR_X(oHead, "num_SubseccaoCNPJ", "num_SubseccaoCNPJ"))
 	aEmpFil := FATPIEMP(cCnpjU) */

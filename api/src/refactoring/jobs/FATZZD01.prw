@@ -92,8 +92,19 @@ User Function FATZZD01()
     // [FIX-MEMO] Nao seleciona ZZD_JSON aqui � campo memo/CLOB nao atravessa
     // resultset TOPCONN de forma confiavel. Le via R_E_C_N_O_ + DbGoto na
     // area nativa, mais abaixo (mesmo fix aplicado no FATZZF01).
+    // [ZZG] Jose Carlos - Artiq - 08/2026
+    // ZZD_CLIPEN/ZZD_FORPEN = 'N' - mesmo mecanismo do PRDPEN e do ja usado
+    // na ZZ9, agora pra cliente/fornecedor pendente (ver
+    // instrucao_zzg_cliente_fornecedor.md). So o filtro entrou aqui - ao
+    // contrario de ZZ901_Classifica, ZZD_MotorNFCe NAO tem um ponto de
+    // "cliente nao encontrado" que falha (NFCe sempre cai num consumidor
+    // generico - cCliD "000001" - quando nao acha um especifico, nunca
+    // falha por isso). Entao nao ha [FIX-CLIFOR-PENDENTE] equivalente
+    // aqui dentro do motor - CLIPEN so e setado de fora (FATPI11, via
+    // cliente_Pendente na ingestao). ZZD_FORPEN na pratica fica sempre
+    // 'N' (NFCe e sempre venda, fornecedor pendente nao se aplica).
     cQry := "SELECT ZZD_COD, ZZD_CHVNFE, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZD") + " "
-    cQry += "WHERE ZZD_STATUS IN ('P','A') AND ZZD_PRDPEN = 'N' "
+    cQry += "WHERE ZZD_STATUS IN ('P','A') AND ZZD_PRDPEN = 'N' AND ZZD_CLIPEN = 'N' AND ZZD_FORPEN = 'N' "
     cQry += "AND ZZD_FILIAL = '" + xFilial("ZZD") + "' "
     cQry += "AND D_E_L_E_T_ = ' ' "
     cQry += "ORDER BY ZZD_DTINCL, ZZD_HRINCL"

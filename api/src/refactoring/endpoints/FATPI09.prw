@@ -11,7 +11,7 @@
 |             Endpoint: POST /fatpi09/v2                                    |
 |                                                                             |
 | Extraido do FATPI01_V2 (branch cModDoc=="65"). NFCe e sempre venda ao      |
-| consumidor (cOper="S" fixo) — por isso toda a logica de Devolucao (ZZB),   |
+| consumidor (cOper="S" fixo) ï¿½ por isso toda a logica de Devolucao (ZZB),   |
 | Entrada (ZZC) e Transferencia/CONVENIOS foi removida, assim como a         |
 | validacao de emitente em SA2 (o PDV emite a nota, nao precisa ser          |
 | fornecedor cadastrado) e a baixa em SFT/SF3 (fiscal e do PDV, nao nosso).  |
@@ -26,36 +26,36 @@
 | [REV2-SYNC-FIX] Jose Carlos - Artiq - 07/2026                             |
 |   Este endpoint SO valida payload e classifica/enfileira na ZZD. Nao      |
 |   chama motor fiscal nenhum                                               |
-|   — nao depende de U_FATCFOP01 nem de U_PI_LOJA_X no caminho sincrono. |
+|   ï¿½ nao depende de U_FATCFOP01 nem de U_PI_LOJA_X no caminho sincrono. |
 |   Resolucao de cliente, numeracao, CFOP/TES e o disparo do ExecAuto       |
-|   LOJA701 (U_PI_LOJA_X) migraram pro FATZZD01.prw (Job) — mesmo        |
+|   LOJA701 (U_PI_LOJA_X) migraram pro FATZZD01.prw (Job) ï¿½ mesmo        |
 |   motivo do ajuste ja feito no FATPI01_V2 pra NFe: quem processa e o Job. |
 |   Por isso este arquivo pode ser compilado/testado isoladamente, sem      |
-|   precisar do FATCFOP01 disponivel (s— o Job precisa dele).              |
+|   precisar do FATCFOP01 disponivel (sï¿½ o Job precisa dele).              |
 |                                                                             |
 | [PENDENTE-FISCAL] Jose Carlos - Artiq - 07/2026                          |
 |   RISCO CONHECIDO, decisao consciente de adiar: o ExecAuto LOJA701       |
 |   RECALCULA impostos via TES/CFOP no momento da inclusao do orcamento.   |
 |   Mas a NFCe ja foi emitida/autorizada pela SEFAZ com os valores que o   |
-|   PDV da CAASP calculou — dai o Antonio ter gravado direto nas tabelas   |
+|   PDV da CAASP calculou ï¿½ dai o Antonio ter gravado direto nas tabelas   |
 |   SIGALOJA no motor original (mesmo padrao do FATPI08/U_FATPI08NF, que   |
 |   nao recalcula, so grava o que veio do PDV). Existe um flag/parametro   |
 |   no SIGALOJA pra aceitar valor ja calculado sem recalcular (mencionado  |
 |   em reuniao, nome exato nao confirmado). Decisao: manter LOJA701 como   |
-|   esta por ora — reavaliar como melhoria/adaptacao DEPOIS de alinhar     |
+|   esta por ora ï¿½ reavaliar como melhoria/adaptacao DEPOIS de alinhar     |
 |   com o cliente. Se migrar, o candidato natural e adaptar a escrita      |
 |   direta do U_FATPI08NF para NFCe (U_FZ_PROS_NFCE), no lugar do          |
 |   ExecAuto. A implementacao de U_PI_LOJA_X agora vive no FATZZD01.prw.|
 |                                                                             |
-| ATENCAO — pontos assumidos que precisam de revisao antes do teste do JOB:  |
+| ATENCAO ï¿½ pontos assumidos que precisam de revisao antes do teste do JOB:  |
 |   1) Nome dos campos de valor total do JSON de NFCe (vlr_TotalProduto/     |
-|      vlr_NotaFiscal) — copiados do padrao ja comprovado no Recibo          |
+|      vlr_NotaFiscal) ï¿½ copiados do padrao ja comprovado no Recibo          |
 |      (FATPI08/U_FATPI08NF). Se o JSON de NFCe usar nomes diferentes,       |
 |      ajustar em U_PI_LOJA_X (agora em FATZZD01.prw).                    |
-|   2) L4_FORMA (forma de pagamento) — hoje grava o texto cru vindo do JSON  |
+|   2) L4_FORMA (forma de pagamento) ï¿½ hoje grava o texto cru vindo do JSON  |
 |      (des_FormaPagamento). Se o SLOJA exigir um DE-PARA para codigo        |
 |      proprio (dinheiro/cartao/etc.), precisa mapear antes de gravar.       |
-|   3) LQ_TIPOCLI fixado em "F" (pessoa fisica) — ajustar se houver cenario  |
+|   3) LQ_TIPOCLI fixado em "F" (pessoa fisica) ï¿½ ajustar se houver cenario  |
 |      de venda NFCe para pessoa juridica.                                   |
 +----------------------------------------------------------------------------+
 */
@@ -169,7 +169,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI09_V2
 	cModDoc := U_PI_STR_X(oHead, 'cod_Mod', 'modelo')
 	aPrd    := oHead['itens']
 	cNatOp  := Upper(AllTrim(U_PI_STR_X(oHead, 'des_NatOp')))
-	// [PERF] Chave de acesso extraida uma vez so — reaproveitada em todo o resto da funcao
+	// [PERF] Chave de acesso extraida uma vez so ï¿½ reaproveitada em todo o resto da funcao
 	// (era chamada U_PI_STR_X(oHead,'cod_ChaveNFe') 7x com o mesmo resultado)
 	cChvNFe := AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe'))
 
@@ -214,7 +214,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI09_V2
 		Return .T.
 	EndIf
 
-	// --- 4. DUPLICIDADE — verifica na propria fila ZZD (nota nao existe em SF2 ainda, GravaBatch/LOJA701 cria depois) ---
+	// --- 4. DUPLICIDADE ï¿½ verifica na propria fila ZZD (nota nao existe em SF2 ainda, GravaBatch/LOJA701 cria depois) ---
 	cQryAux := "SELECT ZZD_STATUS, ZZD_ERRMSG FROM " + RetSqlName("ZZD") + " WHERE ZZD_CHVNFE = '" + cChvNFe + "' AND ZZD_FILIAL = '" + xFilial("ZZD") + "' AND D_E_L_E_T_ = ' '"
 	cAliAux := GetNextAlias()
 	MpSysOpenQuery(cQryAux, cAliAux)
@@ -249,16 +249,22 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI09_V2
 
 	// --- 7. ENFILEIRA NA ZZD PARA O JOB PROCESSAR ---
 	// [REV2-SYNC-FIX] CFOP/TES e o disparo do LOJA701 migraram pro FATZZD01 (Job).
-	// O endpoint nao depende mais de U_FATCFOP01 no caminho sincrono — so
+	// O endpoint nao depende mais de U_FATCFOP01 no caminho sincrono ï¿½ so
 	// valida, classifica e grava o JSON cru. Mesmo padrao ja usado pra NFe.
-	If ZZX_Gravar("ZZD", "NFC", "CHVNFE", cChvNFe, jJson:toJSON(), "", "", cProdPend)
+	// [QTPROD] Jose Carlos - Artiq - 08/2026 - vem pronto no JSON, tag
+	// qt_Produto na raiz da nota (oHead) - so le e repassa (ver
+	// instrucao_qtprod.md). Grava aqui, no endpoint de ingestao - nao em
+	// ZZD_MotorNFCe (FATZZD01.prw), que so processa a linha ja gravada e
+	// nunca escreve na ZZD (a instrucao original apontava o motor por
+	// engano, mesmo padrao de discrepancia ja visto antes nesse arquivo).
+	If ZZX_Gravar("ZZD", "NFC", "CHVNFE", cChvNFe, jJson:toJSON(), "", "", cProdPend, AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
 		nStat := 201
 		jRes['status']    := nStat
 		jRes['resultado'] := "Sucesso"
 		jRes['doc']       := "NFCe enfileirada: " + cChvNFe
 		jRes['info']      := "Nota registrada para processamento assincrono."
 	Else
-		nStat := 230  // [IPASS-FIX] Falha de sistema (gravação na fila) - 2xx pra nao quebrar o iPaaS em transporte, distinto de 200 (falha de payload/validacao)
+		nStat := 230  // [IPASS-FIX] Falha de sistema (gravaï¿½ï¿½o na fila) - 2xx pra nao quebrar o iPaaS em transporte, distinto de 200 (falha de payload/validacao)
 		jRes['status']    := nStat
 		jRes['resultado'] := "Falha"
 		jRes['erro']      := "FilaMuroZ"
@@ -275,19 +281,24 @@ Return lRet
 // ==========================================================================
 // [NOVA] ZZX_Gravar - Grava registro na tabela Muro Z
 // Copia local (Static = escopo do arquivo), mesma assinatura usada no
-// FATPI01_V2 e FATPI08_V2 — ver comentario la sobre consolidacao futura.
-// [ZZF] Ganhou o parametro cPrdPend (default "N") — usado para represar a
+// FATPI01_V2 e FATPI08_V2 ï¿½ ver comentario la sobre consolidacao futura.
+// [ZZF] Ganhou o parametro cPrdPend (default "N") ï¿½ usado para represar a
 // nota com PRDPEND='S' quando ha produto pendente de cadastro. A gravacao
 // em si na ZZF agora e responsabilidade do endpoint FATPI10 (fila de
 // produtos pendentes), via U_ZZF_GRV (FATZZF01.prw).
+// [QTPROD] Jose Carlos - Artiq - 08/2026 - ganhou cQtProd (default ""),
+// parametro dedicado (nao reusa cCampoExtra) porque QTPROD e universal as 6
+// tabelas de nota - mesmo raciocinio do cPrdPend, ver [QTPROD] em
+// U_ZZX_Gravar (FATZZF01.prw) e instrucao_qtprod.md.
 // ==========================================================================
-Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend)
+Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd)
 	Local lOk  := .F.
 	Local cCod := ""
 
 	Default cCampoExtra := ""
 	Default cValorExtra := ""
 	Default cPrdPend    := "N"
+	Default cQtProd     := ""
 
 	cCod := GetSxeNum(cTabMuro, cTabMuro + "_COD")
 
@@ -303,6 +314,11 @@ Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, 
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_HRINCL"), Time()))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_PRDPEN"),cPrdPend))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_ERRMSG"), ""))
+		// Campo numerico (N) no SIGACFG - Val(), nao FieldPut direto do texto
+		// (confirmado com Jose Carlos, ver instrucao_qtprod.md).
+		If FieldPos(cTabMuro + "_QTPROD") > 0
+			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_QTPROD"), Val(cQtProd)))
+		EndIf
 		If !Empty(cCampoExtra)
 			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_" + cCampoExtra), cValorExtra))
 		EndIf

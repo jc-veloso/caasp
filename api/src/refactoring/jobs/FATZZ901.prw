@@ -44,10 +44,12 @@ User Function FATZZ901()
     Local cErrMsg    := ""
     Local cSub       := ""
     Local cTabPai    := ""
+    Local cTipoPen   := ""
     Local lOk        := .F.
     Local lDup       := .F.
     Local nOk        := 0
     Local nErr       := 0
+    Local nPark      := 0
     Local jJson      := Nil
     Local aRet       := {}
     Local dDataBaseSis := CToD("")
@@ -69,11 +71,16 @@ User Function FATZZ901()
     // na area nativa, mais abaixo (mesmo fix aplicado no FATZZF01/demais Jobs).
     // ZZ9_PRDPEN = 'N': registros com produto pendente ficam parados na ZZ9
     // ate serem liberados (fluxo do FATPI10, fora de escopo aqui).
+    // [ZZG] Jose Carlos - Artiq - 08/2026
+    // ZZ9_CLIPEN/ZZ9_FORPEN = 'N' - mesmo mecanismo do PRDPEN, agora pra
+    // cliente/fornecedor pendente (ver instrucao_zzg_cliente_fornecedor.md
+    // e [FIX-CLIFOR-PENDENTE] mais abaixo). Uma nota com qualquer uma das
+    // tres pendencias fica de fora da fila ate ser liberada.
     // [FIX-DESTMU-FILIAL] Jose Carlos - Artiq - 08/2026
     // ZZ9_FILIAL agora vai no SELECT - capturada por linha e usada no UPDATE
     // de ZZ9_DESTMU mais abaixo em vez de xFilial("ZZ9") (ver 2.5.2).
     cQry := "SELECT ZZ9_COD, ZZ9_CHVNFE, ZZ9_FILIAL, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZ9") + " "
-    cQry += "WHERE ZZ9_STATUS IN ('P','A') AND ZZ9_PRDPEN = 'N' "
+    cQry += "WHERE ZZ9_STATUS IN ('P','A') AND ZZ9_PRDPEN = 'N' AND ZZ9_CLIPEN = 'N' AND ZZ9_FORPEN = 'N' "
     cQry += "AND ZZ9_FILIAL = '" + xFilial("ZZ9") + "' "
     cQry += "AND D_E_L_E_T_ = ' ' "
     cQry += "ORDER BY ZZ9_DTINCL, ZZ9_HRINCL"
@@ -88,6 +95,7 @@ User Function FATZZ901()
         cErrMsg := ""
         cSub    := ""
         cTabPai := ""
+        cTipoPen:= ""
         lOk     := .F.
         lDup    := .F.
 
@@ -112,8 +120,12 @@ User Function FATZZ901()
                 cTabPai := IIF(Len(aRet) >= 3, aRet[3], "")
                 lDup    := IIF(Len(aRet) >= 4, aRet[4], .F.)
             Else
-                cErrMsg := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "Erro desconhecido na classificacao")
-                cSub    := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
+                cErrMsg  := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "Erro desconhecido na classificacao")
+                cSub     := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
+                // [FIX-CLIFOR-PENDENTE] 4o elemento "CLI"/"FOR" (quando
+                // presente) distingue "estacionada" de erro real - ver
+                // contrato no cabecalho de ZZ901_Classifica.
+                cTipoPen := IIF(Len(aRet) >= 4 .And. (aRet[4] == "CLI" .Or. aRet[4] == "FOR"), aRet[4], "")
             EndIf
         Else
             cErrMsg := "JSON invalido na fila ZZ9. COD: " + cCod
@@ -132,6 +144,25 @@ User Function FATZZ901()
             EndIf
             nOk++
             ConOut("[FATZZ901] OK: " + cCod + " | Destino: " + cTabPai + IIF(lDup, " (nota ja existia, nao duplicou)", ""))
+        ElseIf !Empty(cTipoPen)
+            // [FIX-CLIFOR-PENDENTE] Jose Carlos - Artiq - 08/2026
+            // Cliente/fornecedor nao encontrado NA HORA da classificacao -
+            // em vez de falhar (STATUS='E'), estaciona a nota: marca
+            // CLIPEN/FORPEN='S' (cFilOri, mesmo motivo do
+            // [FIX-DESTMU-FILIAL] - xFilial("ZZ9") aqui bateria na filial
+            // ja trocada) e reseta STATUS pra 'P' (fica de fora do WHERE
+            // ate a pendencia resolver - mesmo mecanismo ja usado pro
+            // PRDPEN). Nao dispara callback de erro nem conta como falha -
+            // decisao consciente (Jose Carlos, 08/2026): quem detecta e
+            // notifica cliente/fornecedor faltante e o iPaaS, via
+            // cliente_Pendente/fornecedor_Pendente na ingestao (mesmo
+            // padrao do prod_Pendente); isso aqui e so um fallback
+            // defensivo caso aquela deteccao upfront tenha falhado ou
+            // ficado desatualizada. Ver instrucao_zzg_cliente_fornecedor.md.
+            U_UPDSTAT("ZZ9", cCod, "P", "")
+            TCSqlExec("UPDATE " + RetSqlName("ZZ9") + " SET ZZ9_" + IIF(cTipoPen == "CLI", "CLIPEN", "FORPEN") + " = 'S' WHERE ZZ9_COD = '" + cCod + "' AND ZZ9_FILIAL = '" + cFilOri + "' AND D_E_L_E_T_ = ' '")
+            nPark++
+            ConOut("[FATZZ901] ESTACIONADA (" + cTipoPen + " pendente): " + cCod + " | " + Left(cErrMsg, 100))
         Else
             U_UPDSTAT("ZZ9", cCod, "E", cErrMsg)
             // [FIX-CALLBACK-ERRO] Jose Carlos - Artiq - 08/2026
@@ -150,7 +181,7 @@ User Function FATZZ901()
     EndDo
     (cAliZZ9)->(DbCloseArea())
 
-    ConOut("[FATZZ901] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
+    ConOut("[FATZZ901] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
     RpcClearEnv()
 Return
 
@@ -169,7 +200,12 @@ Return
 //                  gravacao final em ZZA/ZZB/ZZC nao roda de novo nesse caso)
 //   lOk == .F.  -> cErrMsg = motivo da falha, cSub = cod_Subseccao (3o
 //                  elemento, quando ja disponivel - ver [FIX-CALLBACK-ERRO]
-//                  no loop principal, FATZZ901())
+//                  no loop principal, FATZZ901()). "Estacionada" (cliente/
+//                  fornecedor pendente, ver [FIX-CLIFOR-PENDENTE]): array
+//                  de 4 elementos, 4o = "CLI" ou "FOR" - o loop principal
+//                  marca ZZ9_CLIPEN/ZZ9_FORPEN='S' e reseta STATUS pra 'P'
+//                  em vez de 'E', sem callback de erro. Falha real de
+//                  verdade: array de 3 elementos (sem 4o), como sempre.
 // ==========================================================================
 Static Function ZZ901_Classifica(jJson)
     Local aInv         := jJson['notas']
@@ -338,14 +374,18 @@ Static Function ZZ901_Classifica(jJson)
     ENDIF
 
     If Empty(cCod)
-        Return {.F., "Destinatario nao localizado. Doc: " + cKeyDest, cSub}
+        // [FIX-CLIFOR-PENDENTE] cTab diz se era cliente (SA1) ou
+        // fornecedor (SA2) que nao foi encontrado - ver contrato de
+        // retorno no cabecalho da funcao e instrucao_zzg_cliente_fornecedor.md.
+        Return {.F., "Destinatario nao localizado. Doc: " + cKeyDest, cSub, IIF(cTab == "SA1", "CLI", "FOR")}
     Endif
 
     // [REV2-EXTRACAO-NFCE] Validacao de emitente em SA2 - sempre aplicavel (NFCe nunca chega aqui)
     SA2->(DbSetOrder(3))
     If !SA2->(DbSeek(xFilial("SA2") + cCnpjEmit))
         SA2->(DbSetOrder(1))
-        Return {.F., "Emitente nao esta cadastrado como fornecedor na filial destino. CNPJ: " + cCnpjEmit, cSub}
+        // [FIX-CLIFOR-PENDENTE] Emitente e sempre fornecedor (SA2) aqui.
+        Return {.F., "Emitente nao esta cadastrado como fornecedor na filial destino. CNPJ: " + cCnpjEmit, cSub, "FOR"}
     EndIf
     SA2->(DbSetOrder(1))
 
@@ -519,7 +559,7 @@ Static Function ZZ901_Classifica(jJson)
     // --- GRAVACAO FINAL EM ZZA/ZZB/ZZC ---
     Do Case
         Case cOper == "D"
-            If !U_ZZX_Gravar("ZZB", "NFD", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON())
+            If !U_ZZX_Gravar("ZZB", "NFD", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "", "", "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
                 Return {.F., "Falha ao gravar na fila ZZB.", cSub}
             EndIf
 
@@ -535,12 +575,12 @@ Static Function ZZ901_Classifica(jJson)
             EndIf
             (cAliAux)->(DbCloseArea())
 
-            If !U_ZZX_Gravar("ZZA", "NFS", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "TRANSF", IIF(lIsTransf, "S", "N"))
+            If !U_ZZX_Gravar("ZZA", "NFS", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "TRANSF", IIF(lIsTransf, "S", "N"), "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
                 Return {.F., "Falha ao gravar na fila ZZA.", cSub}
             EndIf
 
         Otherwise
-            If !U_ZZX_Gravar("ZZC", "NFE", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON())
+            If !U_ZZX_Gravar("ZZC", "NFE", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "", "", "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
                 Return {.F., "Falha ao gravar na fila ZZC.", cSub}
             EndIf
     EndCase

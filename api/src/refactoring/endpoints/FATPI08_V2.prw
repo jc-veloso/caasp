@@ -9,7 +9,7 @@ Descritivo: Hub de Vendas - SIGALOJA (Endpoint REST)
 O endpoint POST nao processa mais a venda diretamente. Ele valida o payload,
 verifica duplicidade (SF2 e fila) e enfileira o JSON na tabela Muro Z.
 para processamento assincrono pelo Job. O motor U_FATPI08NF e as
-funcoes de apoio (FATPI0802 a FATPI0807) permanecem inalteradas — agora sao
+funcoes de apoio (FATPI0802 a FATPI0807) permanecem inalteradas ï¿½ agora sao
 chamadas pelo Job em vez de pelo WSMETHOD POST.
 [REV2] Jose Carlos - Artiq - 07/2026
 Recibo de Venda migrou de ZZD para ZZE (NFe Saida/Devolucao/Entrada/NFCe
@@ -159,7 +159,10 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 	(cAliZZE)->(DbCloseArea())
 
 	// --- Enfileira na ZZE para o Job FATZZE01 processar de forma assincrona ---
-	If ZZX_Gravar("ZZE", "RCV", "CODRCB", cDocPad, cJson, "", "", cProdPend)
+	// [QTPROD] Jose Carlos - Artiq - 08/2026 - vem pronto no JSON, tag
+	// qt_Produto na raiz da nota (oData) - so le e repassa (ver
+	// instrucao_qtprod.md).
+	If ZZX_Gravar("ZZE", "RCV", "CODRCB", cDocPad, cJson, "", "", cProdPend, AllTrim(U_PI_STR_X(oData, 'qt_Produto')))
 		jRes['status']    := 201
 		jRes['resultado'] := "Sucesso"
 		jRes['doc']       := "Recibo enfileirado: " + AllTrim(cDocJson)
@@ -177,25 +180,30 @@ Return lRet
 
 // ==========================================================================
 // [REV2] ZZX_Gravar - Grava registro na tabela Muro Z
-// Parametrizada por cCampoChave (antes fixava "_CHVNFE") — corrige bug em que
+// Parametrizada por cCampoChave (antes fixava "_CHVNFE") ï¿½ corrige bug em que
 // o job antigo lia ZZD_CODRCB mas essa funcao so gravava em _CHVNFE.
 // cTabMuro: "ZZE" (Recibo de Venda, endpoint FATPI08_V2)
 // cProc: "RCV"
-// cCampoChave: sufixo do campo de unicidade — "CODRCB" para Recibo
+// cCampoChave: sufixo do campo de unicidade ï¿½ "CODRCB" para Recibo
 // cChvRef: numero do cupom/recibo, ja padronizado (chave de unicidade)
 // cJsonPayload: corpo JSON original recebido do iPaaS (string, sem alteracao)
 // [prod_Pendente] Jose Carlos - Artiq - 08/2026
 // Ganhou os parametros cCampoExtra/cValorExtra/cPrdPend (default "" / "" / "N"),
 // mesma assinatura ja usada no FATPI09.prw. cPrdPend grava ZZE_PRDPEN com o
 // valor de prod_Pendente recebido do iPaaS, em vez do "N" fixo de antes.
+// [QTPROD] Jose Carlos - Artiq - 08/2026 - ganhou cQtProd (default ""),
+// parametro dedicado (nao reusa cCampoExtra) porque QTPROD e universal as 6
+// tabelas de nota - mesmo raciocinio do cPrdPend, ver [QTPROD] em
+// U_ZZX_Gravar (FATZZF01.prw) e instrucao_qtprod.md.
 // ==========================================================================
-Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend)
+Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd)
 	Local lOk  := .F.
 	Local cCod := ""
 
 	Default cCampoExtra := ""
 	Default cValorExtra := ""
 	Default cPrdPend    := "N"
+	Default cQtProd     := ""
 
 	cCod := GetSxeNum(cTabMuro, cTabMuro + "_COD")
 
@@ -211,6 +219,11 @@ Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, 
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_HRINCL"), Time()))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_PRDPEN"), cPrdPend))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_ERRMSG"), ""))
+		// Campo numerico (N) no SIGACFG - Val(), nao FieldPut direto do texto
+		// (confirmado com Jose Carlos, ver instrucao_qtprod.md).
+		If FieldPos(cTabMuro + "_QTPROD") > 0
+			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_QTPROD"), Val(cQtProd)))
+		EndIf
 		If !Empty(cCampoExtra)
 			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_" + cCampoExtra), cValorExtra))
 		EndIf
@@ -570,7 +583,7 @@ User Function FATPI08NF(oData, cFilDest)
 												cFormaRec := Upper(AllTrim(cFormaRec))
 												cFormaTrat := ""
 
-												If "CARTAO" $ cFormaRec .Or. "CARTÃO" $ cFormaRec .Or. "CREDITO" $ cFormaRec .Or. "DEBITO" $ cFormaRec
+												If "CARTAO" $ cFormaRec .Or. "CARTï¿½O" $ cFormaRec .Or. "CREDITO" $ cFormaRec .Or. "DEBITO" $ cFormaRec
 													cFormaTrat := "CC "
 												ElseIf "PIX" $ cFormaRec
 													cFormaTrat := "PIX"

@@ -303,3 +303,197 @@ Static Function BuscaCad(cCad,nOpc)
 	Endif
 
 Return lRet
+
+// ==========================================================================
+// PI_CLI_X — Upsert de Cliente (CRMA980), extraida de FATPI06.prw (DoPost)
+// [ZZG] Jose Carlos - Artiq - 08/2026
+// Extraida pra ser chamada tanto pelo endpoint sincrono (FATPI06.prw, que
+// agora so faz parse+chamada) quanto pelo Job assincrono FATZZG01.prw
+// (cliente/fornecedor pendente, ver instrucao_zzg_cliente_fornecedor.md).
+// Retorno no mesmo formato de U_PI_PROD_X: {lOk, cMensagem, cCodProtheus}.
+// Logica de negocio (model CRMA980, validacao de duplicidade via
+// A1_LEGADO) e transcricao 1:1 do DoPost original - so trocou a fonte do
+// JSON (de oSelf:GetContent() pra parametro ja parseado) e a saida (de
+// oSelf:SetResponse pro array de retorno).
+// ==========================================================================
+User Function PI_CLI_X(oJson)
+    Local aRet       := {.F., "", ""}
+    Local bErrBlock
+    Local cErrorMsg  := ""
+    Local cProxCod   := ""
+    Local cVLeg      := ""
+    Local cEstAux    := ""
+    Local oModel     := Nil
+    Local oSA1Mod    := Nil
+    Local cQryAux    := ""
+    Local cAliAux    := ""
+
+    bErrBlock := ErrorBlock({ |e| cErrorMsg := e:Description, Break(e) })
+
+    Begin Sequence
+
+        cVLeg := SubStr(U_PI_STR_X(oJson, "codigo"), 1, 15)
+
+        If !Empty(cVLeg)
+            cQryAux := "SELECT A1_COD FROM " + RetSqlName("SA1") + " WHERE A1_LEGADO = '" + cVLeg + "' AND D_E_L_E_T_ = ' '"
+            cAliAux := GetNextAlias()
+            MpSysOpenQuery(cQryAux, cAliAux)
+            If (cAliAux)->(!Eof())
+                (cAliAux)->(DbCloseArea())
+                aRet := {.F., "Cliente ja cadastrado: " + cVLeg, ""}
+                Break
+            EndIf
+            (cAliAux)->(DbCloseArea())
+        EndIf
+
+        cEstAux := Upper(U_PI_STR_X(oJson, "estado"))
+
+        If "SAO PAULO" $ cEstAux .Or. "SÃO PAULO" $ cEstAux
+            cEstAux := "SP"
+        Else
+            cEstAux := Left(cEstAux, 2)
+        EndIf
+
+        cProxCod := GetSxeNum("SA1", "A1_COD")
+
+        oModel := FWLoadModel("CRMA980")
+        oModel:SetOperation(MODEL_OPERATION_INSERT)
+        oModel:Activate()
+
+        oSA1Mod := oModel:GetModel("SA1MASTER")
+
+        oSA1Mod:SetValue("A1_COD"    , cProxCod)
+        oSA1Mod:SetValue("A1_LOJA"   , "01")
+        oSA1Mod:SetValue("A1_NOME"   , Upper(U_PI_STR_X(oJson, "nome")))
+        oSA1Mod:SetValue("A1_NREDUZ" , SubStr(Upper(U_PI_STR_X(oJson, "nome")), 1, 20))
+        oSA1Mod:SetValue("A1_CGC"    , U_PI_STR_X(oJson, "cpf"))
+        oSA1Mod:SetValue("A1_END"    , Upper(U_PI_STR_X(oJson, "endereco")))
+        oSA1Mod:SetValue("A1_BAIRRO" , Upper(U_PI_STR_X(oJson, "bairro")))
+        oSA1Mod:SetValue("A1_MUN"    , Upper(U_PI_STR_X(oJson, "municipio")))
+        oSA1Mod:SetValue("A1_EST"    , cEstAux)
+        oSA1Mod:SetValue("A1_CEP"    , U_PI_STR_X(oJson, "cep"))
+        oSA1Mod:SetValue("A1_DDD"    , U_PI_STR_X(oJson, "ddd"))
+        oSA1Mod:SetValue("A1_TEL"    , U_PI_STR_X(oJson, "telefone"))
+        oSA1Mod:SetValue("A1_EMAIL"  , Lower(U_PI_STR_X(oJson, "email")))
+        oSA1Mod:SetValue("A1_TIPO"   , "F")
+        oSA1Mod:SetValue("A1_PESSOA" , "F")
+        oSA1Mod:SetValue("A1_LEGADO" , cVLeg)
+
+        If !Empty(U_PI_STR_X(oJson, "cod_ibge"))
+            oSA1Mod:SetValue("A1_COD_MUN", U_PI_STR_X(oJson, "cod_ibge"))
+        EndIf
+
+        If oModel:VldData()
+            If oModel:CommitData()
+                ConfirmSX8()
+                aRet := {.T., "Cliente cadastrado: " + cProxCod, cProxCod}
+            Else
+                RollBackSX8()
+                aRet := {.F., oModel:GetErrorMessage(), ""}
+            EndIf
+        Else
+            RollBackSX8()
+            aRet := {.F., oModel:GetErrorMessage(), ""}
+        EndIf
+
+        If oModel != Nil
+            oModel:DeActivate()
+            oModel:Destroy()
+            oModel := Nil
+        EndIf
+
+    End Sequence
+
+    ErrorBlock(bErrBlock)
+
+    If !Empty(cErrorMsg) .And. !aRet[1]
+        aRet := {.F., cErrorMsg, ""}
+    EndIf
+
+Return aRet
+
+// ==========================================================================
+// PI_FORN_X — Upsert de Fornecedor (MATA020), extraida de FATPI03.PRW
+// (WSMETHOD POST NEW). [ZZG] Jose Carlos - Artiq - 08/2026
+// Processa UM fornecedor por chamada (nao o array/lote inteiro) - quem
+// itera multiplos itens e o chamador (endpoint FATPI03.prw, ou o Job
+// FATZZG01.prw pro fluxo assincrono). Retorno {lOk, cMensagem,
+// cCodProtheus}, mesmo formato de U_PI_PROD_X/U_PI_CLI_X. Logica do model
+// MATA020 (incluindo o bloco de dados bancarios) e transcricao 1:1 do
+// loop original (FATPI03.PRW, linhas 90-167) - nao tinha ErrorBlock/Begin
+// Sequence no original, mantido assim aqui tambem (excecao nao tratada
+// propaga pro chamador - mesmo risco ja documentado como pendencia geral
+// de tratamento de erro nos Jobs, nao resolvido so aqui).
+// ==========================================================================
+User Function PI_FORN_X(jItem)
+    Local aRet      := {.F., "", ""}
+    Local cCNPJ     := ""
+    Local cMun      := ""
+    Local cProxCod  := ""
+    Local cLoja     := ""
+    Local oModel    := Nil
+
+    Private lMsErroAuto := .F.
+    Private lMsHelpAuto := .F.
+
+    cCNPJ := U_PI_LIMPA_X(cValToChar(jItem['num_CNPJ_CPF']))
+    cMun  := AllTrim(cValToChar(jItem['nom_Municipio']))
+
+    If Empty(cMun)
+        Return {.F., "O campo Municipio (nom_Municipio) e obrigatorio e nao foi preenchido.", ""}
+    EndIf
+
+    DbSelectArea("SA2")
+    SA2->(DbSetOrder(3))
+
+    oModel := FwLoadModel("MATA020")
+
+    If !Empty(cCNPJ) .And. SA2->(MsSeek(FWxFilial("SA2") + cCNPJ))
+        oModel:SetOperation(MODEL_OPERATION_UPDATE)
+        cProxCod := SA2->A2_COD
+        cLoja    := SA2->A2_LOJA
+    Else
+        oModel:SetOperation(MODEL_OPERATION_INSERT)
+        cProxCod := GetSxeNum("SA2", "A2_COD")
+        cLoja    := "01"
+        ConfirmSX8()
+    EndIf
+
+    oModel:Activate()
+    oModel:SetValue("SA2MASTER", "A2_COD"   , cProxCod)
+    oModel:SetValue("SA2MASTER", "A2_LOJA"  , cLoja)
+    oModel:SetValue("SA2MASTER", "A2_NOME"  , Left(cValToChar(jItem["nom_Fornecedor"]), 40))
+    oModel:SetValue("SA2MASTER", "A2_NREDUZ", Left(cValToChar(jItem["nom_Fantasia"]), 20))
+    oModel:SetValue("SA2MASTER", "A2_TIPO"  , Upper(AllTrim(cValToChar(jItem["tpo_Pessoa"]))))
+    oModel:SetValue("SA2MASTER", "A2_CGC"   , cCNPJ)
+
+    oModel:SetValue("SA2MASTER", "A2_EST" , Upper(AllTrim(cValToChar(jItem["cod_UF"]))))
+    oModel:SetValue("SA2MASTER", "A2_MUN" , Left(cMun, 30))
+    oModel:SetValue("SA2MASTER", "A2_CEP" , StrTran(cValToChar(jItem["num_CEP"]), "-", ""))
+
+    oModel:SetValue("SA2MASTER", "A2_END"   , Left(cValToChar(jItem["nom_Logradouro"]), 40))
+    oModel:SetValue("SA2MASTER", "A2_BAIRRO", Left(cValToChar(jItem["nom_Bairro"]), 30))
+    oModel:SetValue("SA2MASTER", "A2_INSCR" , AllTrim(cValToChar(jItem["num_InscricaoEstadual"])))
+
+    oModel:SetValue("SA2MASTER", "A2_BANCO"  , cValToChar(jItem["cod_Banco"]))
+    oModel:SetValue("SA2MASTER", "A2_AGENCIA", cValToChar(jItem["num_Agencia"]))
+    oModel:SetValue("SA2MASTER", "A2_NUMCON" , cValToChar(jItem["num_ContaCorrente"]))
+
+    oModel:SetValue("SA2MASTER", "A2_RISCO" , "A")
+    oModel:SetValue("SA2MASTER", "A2_MSBLQL", IIF(Upper(cValToChar(jItem["flg_Ativo"])) == "S", "2", "1"))
+
+    If oModel:VldData()
+        If oModel:CommitData()
+            aRet := {.T., "Fornecedor incluido com sucesso: " + cProxCod, cProxCod}
+        Else
+            aRet := {.F., oModel:GetErrorMessage(), ""}
+        EndIf
+    Else
+        aRet := {.F., oModel:GetErrorMessage(), ""}
+    EndIf
+
+    oModel:DeActivate()
+    oModel:Destroy()
+    oModel := Nil
+
+Return aRet

@@ -176,7 +176,10 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01_V2
 			// ZZ9 nao tem campo _PROC (diferente de ZZA-ZZE) - passa "" pra
 			// cProc, o ZZX_Gravar (FATZZF01.prw) ja ignora esse campo pra
 			// tabelas que nao tem ele.
-			If U_ZZX_Gravar("ZZ9", "", "CHVNFE", cChave, jJson:toJSON(), "", "", cProdPend)
+			// [QTPROD] Jose Carlos - Artiq - 08/2026 - vem pronto no JSON,
+			// tag qt_Produto na raiz da nota (oHead) - so le e repassa, sem
+			// calcular (ver instrucao_qtprod.md).
+			If U_ZZX_Gravar("ZZ9", "", "CHVNFE", cChave, jJson:toJSON(), "", "", cProdPend, AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
 				nStat := 201
 				jRes['status']    := nStat
 				jRes['resultado'] := "Sucesso"

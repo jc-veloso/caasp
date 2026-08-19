@@ -96,7 +96,7 @@ User Function FATZZF01()
             // releitura via outra conexao/query que pode nao enxergar o
             // UPDATE que acabou de commitar (U_UPDSTAT e este SELECT
             // usam mecanismos de leitura diferentes: TCSqlExec vs MpSysOpenQuery).
-            If ZZF_ALL_OK(cChvRef, cCod)
+            If U_ZZPENDOK(cChvRef, cCod, "ZZF")
                 // [REV2] Mapeamento atualizado: NFS=ZZA / NFD=ZZB / NFE=ZZC / NFC=ZZD / RCV=ZZE
                 // [ZZ9] ZZ9 - nota NFe ainda nao classificada pelo FATZZ901 quando o
                 // produto pendente foi avisado (caso comum, ver FATPI10.prw)
@@ -109,7 +109,7 @@ User Function FATZZF01()
                     Case cTipoNF == "RCV" ; cTabPai := "ZZE"
                     Otherwise              ; cTabPai := "ZZA"
                 EndCase
-                ZZF_LIBNF(cTabPai, cChvRef)
+                U_ZZ_LIBNF(cTabPai, cChvRef)
                 ConOut("[FATZZF01] Nota liberada na " + cTabPai + " | Chave: " + cChvRef)
 
                 // [FIX-CALLBACK-PRODUTO] Jose Carlos - Artiq - 08/2026
@@ -301,29 +301,86 @@ Static Function ZZF_CADPRD(cCodLeg)
     FreeObj(jResp)
 Return aRet
 
-Static Function ZZF_ALL_OK(cChvRef, cCodAtual)
-    Local cAli := GetNextAlias()
-    Local lRet := .F.
-    Local nQtd := 0
-    Local cQry := "SELECT COUNT(*) AS QTD FROM " + RetSqlName("ZZF") + " "
+// ==========================================================================
+// ZZPENDOK — checa se uma nota (cChvRef) esta totalmente livre de
+// pendencias, olhando as DUAS filas de pendencia (ZZF/produto e
+// ZZG/cliente-fornecedor), nao so a que acabou de terminar.
+// [ZZG] Jose Carlos - Artiq - 08/2026
+// Promovida de Static (ZZF_ALL_OK, so olhava ZZF) pra User Function -
+// FATZZG01.prw (lote de compilacao separado) precisa chamar isso tambem,
+// mesma razao de sempre (Static Function nao atravessa lote). Uma nota
+// pode ter produto pendente resolvido mas cliente/fornecedor nao, e
+// vice-versa - so libera quando as duas filas estao zeradas pra aquela
+// chave (ver Parte 5 da instrucao_zzg_cliente_fornecedor.md).
+// cTabAtual ("ZZF" ou "ZZG") indica qual fila o chamador acabou de
+// atualizar - so essa fila usa cCodAtual pra excluir o proprio registro
+// da contagem (mesmo motivo do [FIX-VISIBILIDADE] original: nao confiar
+// numa releitura via MpSysOpenQuery que pode nao enxergar um UPDATE que
+// acabou de commitar via TCSqlExec). A OUTRA fila e checada sem exclusao -
+// nao ha risco de leitura-stale nela, ja que nenhum UPDATE acabou de
+// rodar la nesta mesma chamada.
+// ==========================================================================
+User Function ZZPENDOK(cChvRef, cCodAtual, cTabAtual)
+    Local cAli   := ""
+    Local lRet   := .F.
+    Local nQtdF  := 0
+    Local nQtdG  := 0
+    Local cQry   := ""
+
+    cQry := "SELECT COUNT(*) AS QTD FROM " + RetSqlName("ZZF") + " "
     cQry += "WHERE ZZF_CHVREF = '" + cChvRef + "' AND ZZF_STATUS IN ('P','A','E') "
-    cQry += "AND ZZF_COD != '" + cCodAtual + "' "
+    If cTabAtual == "ZZF"
+        cQry += "AND ZZF_COD != '" + cCodAtual + "' "
+    EndIf
     cQry += "AND D_E_L_E_T_ = ' '"
+    cAli := GetNextAlias()
     MpSysOpenQuery(cQry, cAli)
     If (cAli)->(!Eof())
-        nQtd := (cAli)->QTD
-        lRet := (nQtd == 0)
+        nQtdF := (cAli)->QTD
     EndIf
     (cAli)->(DbCloseArea())
-    ConOut("[FATZZF01] ZZF_ALL_OK | Chave: " + cChvRef + " | Pendentes (excl. atual): " + cValToChar(nQtd) + " | " + IIF(lRet, "LIBERA", "AGUARDA OUTROS ITENS"))
+
+    cQry := "SELECT COUNT(*) AS QTD FROM " + RetSqlName("ZZG") + " "
+    cQry += "WHERE ZZG_CHVREF = '" + cChvRef + "' AND ZZG_STATUS IN ('P','A','E') "
+    If cTabAtual == "ZZG"
+        cQry += "AND ZZG_COD != '" + cCodAtual + "' "
+    EndIf
+    cQry += "AND D_E_L_E_T_ = ' '"
+    cAli := GetNextAlias()
+    MpSysOpenQuery(cQry, cAli)
+    If (cAli)->(!Eof())
+        nQtdG := (cAli)->QTD
+    EndIf
+    (cAli)->(DbCloseArea())
+
+    lRet := (nQtdF == 0 .And. nQtdG == 0)
+    ConOut("[ZZPENDOK] Chave: " + cChvRef + " | ZZF pendentes: " + cValToChar(nQtdF) + " | ZZG pendentes: " + cValToChar(nQtdG) + " | " + IIF(lRet, "LIBERA", "AGUARDA OUTRAS PENDENCIAS"))
 Return lRet
 
-Static Function ZZF_LIBNF(cTabPai, cChvRef)
+// ==========================================================================
+// ZZ_LIBNF — libera a nota pai, zerando PRDPEN sempre e CLIPEN/FORPEN
+// quando a tabela tiver esses campos (ZZ9/ZZD - ver Parte 5 da
+// instrucao_zzg_cliente_fornecedor.md; ZZA/ZZB/ZZC/ZZE nao tem esses
+// campos, o FieldPos guarda contra isso).
+// [ZZG] Jose Carlos - Artiq - 08/2026
+// Promovida de Static (ZZF_LIBNF, so zerava PRDPEN) pra User Function -
+// FATZZG01.prw tambem precisa chamar isso.
+// ==========================================================================
+User Function ZZ_LIBNF(cTabPai, cChvRef)
     Local cCampChv := cTabPai + "_CHVNFE"
-    Local cCampPrd := cTabPai + "_PRDPEN"
+    Local cSql     := ""
     // [REV2] Recibo agora e ZZE (era ZZD) � excecao de campo-chave (CODRCB, nao CHVNFE)
     If cTabPai == "ZZE" ; cCampChv := "ZZE_CODRCB" ; EndIf
-    TCSqlExec("UPDATE " + RetSqlName(cTabPai) + " SET " + cCampPrd + " = 'N' WHERE " + cCampChv + " = '" + cChvRef + "' AND D_E_L_E_T_ = ' '")
+
+    cSql := "UPDATE " + RetSqlName(cTabPai) + " SET " + cTabPai + "_PRDPEN = 'N'"
+    If (cTabPai)->(FieldPos(cTabPai + "_CLIPEN")) > 0
+        cSql += ", " + cTabPai + "_CLIPEN = 'N'"
+    EndIf
+    If (cTabPai)->(FieldPos(cTabPai + "_FORPEN")) > 0
+        cSql += ", " + cTabPai + "_FORPEN = 'N'"
+    EndIf
+    cSql += " WHERE " + cCampChv + " = '" + cChvRef + "' AND D_E_L_E_T_ = ' '"
+    TCSqlExec(cSql)
 Return
 
 // ==========================================================================
@@ -416,13 +473,14 @@ Return lOk
 // cCampoExtra/cValorExtra: opcional - campo adicional generico (ex:
 // ZZA_TRANSF).
 // ==========================================================================
-User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend)
+User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd)
     Local lOk  := .F.
     Local cCod := ""
 
     Default cCampoExtra := ""
     Default cValorExtra := ""
     Default cPrdPend    := "N"
+    Default cQtProd     := ""
 
     cCod := GetSxeNum(cTabMuro, cTabMuro + "_COD")
 
@@ -440,6 +498,17 @@ User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cC
         (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_HRINCL"), Time()))
         (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_PRDPEN"), cPrdPend))
         (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_ERRMSG"), ""))
+        // [QTPROD] Jose Carlos - Artiq - 08/2026 - parametro dedicado (nao
+        // cCampoExtra/cValorExtra) porque QTPROD e universal as 6 tabelas de
+        // nota, enquanto cCampoExtra ja esta ocupado por campo especifico em
+        // pelo menos um call site (ZZA/TRANSF, ver ZZ901_Classifica em
+        // FATZZ901.prw) - mesmo raciocinio ja usado pra cPrdPend. Guarda
+        // FieldPos por seguranca, ainda que hoje o campo exista nas 6.
+        // Campo numerico (N) no SIGACFG - Val() no texto vindo do JSON, nao
+        // FieldPut direto (confirmado com Jose Carlos, ver instrucao_qtprod.md).
+        If FieldPos(cTabMuro + "_QTPROD") > 0
+            (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_QTPROD"), Val(cQtProd)))
+        EndIf
         If !Empty(cCampoExtra)
             (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_" + cCampoExtra), cValorExtra))
         EndIf

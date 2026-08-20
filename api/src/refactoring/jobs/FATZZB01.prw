@@ -40,6 +40,8 @@ User Function FATZZB01()
     Local nErr     := 0
     Local jJson    := Nil
     Local aRet     := {}
+    Local aFila    := {}
+    Local nJ       := 0
 
     Private __cBatch := "1"
 
@@ -57,10 +59,23 @@ User Function FATZZB01()
 
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZB, .T., .T.)
 
+    // [FIX-ALIAS-EVICTION] Jose Carlos - Artiq - 08/2026
+    // Mesmo bug ja corrigido em FATZZD01.prw/FATZZA01.prw: cAliZZB
+    // (cursor TOPCONN) ficava aberto durante o loop inteiro, inclusive
+    // durante a chamada a ZZB_MotorDevolucao -> U_PI_DEVOL_X (MATA103) -
+    // motor nativo mexe pesado em work areas e pode evictar/reciclar o
+    // slot do cursor mais antigo ainda aberto. Corrigido materializando a
+    // fila inteira numa array ANTES de processar qualquer nota.
     While (cAliZZB)->(!Eof())
-        cCod    := AllTrim((cAliZZB)->ZZB_COD)
-        cChvNFe := AllTrim((cAliZZB)->ZZB_CHVNFE)
-        nRecno  := (cAliZZB)->RECNO
+        aAdd(aFila, {AllTrim((cAliZZB)->ZZB_COD), AllTrim((cAliZZB)->ZZB_CHVNFE), (cAliZZB)->RECNO})
+        (cAliZZB)->(DbSkip())
+    EndDo
+    (cAliZZB)->(DbCloseArea())
+
+    For nJ := 1 To Len(aFila)
+        cCod    := aFila[nJ][1]
+        cChvNFe := aFila[nJ][2]
+        nRecno  := aFila[nJ][3]
         cErrMsg := ""
         cSub    := ""
         cFilCb  := ""
@@ -109,10 +124,7 @@ User Function FATZZB01()
             nErr++
             ConOut("[FATZZB01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
-
-        (cAliZZB)->(DbSkip())
-    EndDo
-    (cAliZZB)->(DbCloseArea())
+    Next nJ
 
     ConOut("[FATZZB01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
     RpcClearEnv()

@@ -42,6 +42,8 @@ User Function FATZZA01()
     Local nErr     := 0
     Local jJson    := Nil
     Local aRet     := {}
+    Local aFila    := {}
+    Local nJ       := 0
 
     Private __cBatch := "1"
 
@@ -59,11 +61,29 @@ User Function FATZZA01()
 
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZA, .T., .T.)
 
+    // [FIX-ALIAS-EVICTION] Jose Carlos - Artiq - 08/2026
+    // Erro reproduzido em teste real: "Alias does not exist <alias>" no
+    // (cAliZZA)->(DbSkip()) apos processar uma nota - mesmo bug ja
+    // corrigido em FATZZD01.prw. cAliZZA (cursor TOPCONN via
+    // GetNextAlias) ficava aberto durante o loop inteiro, inclusive
+    // durante a chamada a ZZA_MotorSaida -> U_PI_SAIDA_X -> MaNfs2Nfs
+    // (FATPI01S.prw) - o motor nativo de faturamento mexe pesado em work
+    // areas internamente (SE1/SE5/SD1/SFT/SF3, motor de impostos etc.) e
+    // pode evictar/reciclar o slot do cursor mais antigo ainda aberto.
+    // Corrigido materializando a fila inteira numa array ANTES de
+    // processar qualquer nota - o cursor TOPCONN fecha logo depois de ler
+    // a fila, entao nao sobrevive a nenhuma chamada ao motor.
     While (cAliZZA)->(!Eof())
-        cCod    := AllTrim((cAliZZA)->ZZA_COD)
-        cChvNFe := AllTrim((cAliZZA)->ZZA_CHVNFE)
-        cProc   := AllTrim((cAliZZA)->ZZA_PROC)
-        nRecno  := (cAliZZA)->RECNO
+        aAdd(aFila, {AllTrim((cAliZZA)->ZZA_COD), AllTrim((cAliZZA)->ZZA_CHVNFE), AllTrim((cAliZZA)->ZZA_PROC), (cAliZZA)->RECNO})
+        (cAliZZA)->(DbSkip())
+    EndDo
+    (cAliZZA)->(DbCloseArea())
+
+    For nJ := 1 To Len(aFila)
+        cCod    := aFila[nJ][1]
+        cChvNFe := aFila[nJ][2]
+        cProc   := aFila[nJ][3]
+        nRecno  := aFila[nJ][4]
         cErrMsg := ""
         cSub    := ""
         cFilCb  := ""
@@ -116,10 +136,7 @@ User Function FATZZA01()
             nErr++
             ConOut("[FATZZA01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
-
-        (cAliZZA)->(DbSkip())
-    EndDo
-    (cAliZZA)->(DbCloseArea())
+    Next nJ
 
     ConOut("[FATZZA01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
     RpcClearEnv()

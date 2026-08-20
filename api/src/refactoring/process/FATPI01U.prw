@@ -340,8 +340,16 @@ User Function PI_CLI_X(oJson)
             cAliAux := GetNextAlias()
             MpSysOpenQuery(cQryAux, cAliAux)
             If (cAliAux)->(!Eof())
+                // [FIX-JA-CADASTRADO] Jose Carlos - Artiq - 08/2026
+                // Achado em teste real (19/08): cliente ja cadastrado
+                // retornava {.F., ...} - tratado como ERRO, o que travava a
+                // liberacao da pendencia (U_ZZPENDOK/U_ZZ_LIBNF so rodam no
+                // caminho lOk==.T. em FATZZG01.prw). Mas "ja cadastrado" nao
+                // e falha - o objetivo (cliente existir) ja foi atingido.
+                // Corrigido pra sucesso, devolvendo o A1_COD ja existente.
+                cProxCod := AllTrim((cAliAux)->A1_COD)
                 (cAliAux)->(DbCloseArea())
-                aRet := {.F., "Cliente ja cadastrado: " + cVLeg, ""}
+                aRet := {.T., "Cliente ja cadastrado (mantido): " + cVLeg, cProxCod}
                 Break
             EndIf
             (cAliAux)->(DbCloseArea())
@@ -392,11 +400,16 @@ User Function PI_CLI_X(oJson)
         // [FIX-SYNC-PICLI] Jose Carlos - Artiq - 08/2026
         // A1_COD_MUN sem default de cod_Municipio era divergente do
         // FATPI06.prw ja corrigido - ver instrucao_sync_pi_cli_forn.md,
-        // item 1.1. Default primeiro, cod_ibge sobrescreve se vier.
+        // item 1.1. Default primeiro, cod_mun sobrescreve se vier.
+        // [FIX-CODMUN] Jose Carlos - Artiq - 08/2026
+        // Chave de override era "cod_ibge", mas o payload real (fila ZZG,
+        // testado 19/08) manda "cod_mun" - "cod_ibge" nunca vinha, override
+        // nunca disparava, ficava so com cod_Municipio (que nao e um codigo
+        // IBGE valido). Corrigido pra ler a chave certa.
         oSA1Mod:SetValue("A1_COD_MUN", U_PI_STR_X(oJson, "cod_Municipio"))
 
-        If !Empty(U_PI_STR_X(oJson, "cod_ibge"))
-            oSA1Mod:SetValue("A1_COD_MUN", U_PI_STR_X(oJson, "cod_ibge"))
+        If !Empty(U_PI_STR_X(oJson, "cod_mun"))
+            oSA1Mod:SetValue("A1_COD_MUN", U_PI_STR_X(oJson, "cod_mun"))
         EndIf
 
         If oModel:VldData()

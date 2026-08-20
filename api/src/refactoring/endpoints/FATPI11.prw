@@ -113,15 +113,23 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 		Return .T.
 	EndIf
 
-	If !(cTipoNF $ "ZZ9/NFC")
+	// Aceita "NFE" alem de "ZZ9" (mesmo dominio, ver contrato no cabecalho) -
+	// normalizado pro literal correto logo abaixo.
+	If !(cTipoNF $ "ZZ9/NFE/NFC")
 		nStat := 200
 		jRes['status']    := nStat
 		jRes['resultado'] := "Falha"
 		jRes['erro']      := "Tipo"
-		jRes['mensagem']  := "tipo invalido: " + cTipoNF + ". Esperado ZZ9 ou NFC."
+		jRes['mensagem']  := "tipo invalido: " + cTipoNF + ". Esperado ZZ9, NFE ou NFC."
 		Self:setStatus(nStat)
 		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 		Return .T.
+	EndIf
+
+	// FATZZG01.prw compara ZZG_TIPONF == "ZZ9" pra achar a tabela pai - sem
+	// normalizar aqui, "NFE" gravado ao pe da letra cairia no Else errado (ZZD).
+	If cTipoNF == "NFE"
+		cTipoNF := "ZZ9"
 	EndIf
 
 	If !(cTipoPen $ "CLI/FOR")

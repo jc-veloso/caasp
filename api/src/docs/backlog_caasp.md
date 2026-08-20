@@ -72,6 +72,38 @@ isso não sai, manter o fallback hardcoded como está (não é pra "corrigir"
 isso como violação de segredo hardcoded sem essa solução definitiva
 pronta).
 
+## 6. Conversão dos Jobs FATZZ* pra multithread/paralelo
+
+Proposta de arquitetura completa em `arquitetura_loop_startjob.md`
+(diagramas: `diagrama_startjob_paralelo.svg`,
+`diagrama_orquestrador_pendencias.svg`). Volume atual (~5.000 notas/dia)
+não exige isso hoje — é ganho de latência, não de capacidade — mas fica
+registrado pra quando o volume crescer. Três propostas, não excludentes:
+
+- **Proposta 1 (baixo risco, recomendada primeiro)**: loop interno no
+  próprio fonte do Job — reconsulta a fila e processa até zerar, em vez
+  de sair e esperar o próximo disparo do Schedule. Elimina overhead de
+  reabertura de ambiente repetido. Continua single-thread, sem risco de
+  concorrência novo. Falta só definir a válvula de escape (limite de
+  tempo/quantidade por execução, pra não rodar indefinidamente).
+- **Proposta 2 (risco moderado)**: distribuição em até 5 threads
+  paralelas via `StartJob()`, lotes fixos pré-divididos (evita disputa de
+  `SELECT` entre threads). Precisa de status novo `'F'` + timestamp de
+  início de processamento, e uma decisão em aberto sobre limitar o total
+  de threads simultâneas globalmente (não só por rodada) — risco real de
+  contenção no Oracle se não limitar.
+- **Proposta 3**: Job orquestrador dedicado só pra pendências
+  (`ZZF`/`ZZG`), dispara `StartJob` direcionado pra nota específica assim
+  que ela fica livre, em vez de esperar o próximo ciclo normal do Job de
+  destino. Mais seguro que a Proposta 2 (sem disputa de `SELECT`), ganho
+  depende do intervalo real do Schedule.
+
+Riscos transversais a resolver antes de qualquer paralelização de
+verdade: claim atômico de linha por thread (mecanismo ainda não
+confirmado via `TCSqlExec`) e duplicidade de cadastro cliente/fornecedor
+se duas threads precisarem do mesmo CNPJ novo ao mesmo tempo (`CheckLeg`
+atual não protege contra corrida).
+
 ---
 
 *Adicionar novos itens conforme forem identificados. Cada item deve ter

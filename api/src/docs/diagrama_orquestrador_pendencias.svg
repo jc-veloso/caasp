@@ -1,0 +1,50 @@
+<svg width="680" height="420" viewBox="0 0 680 420" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Arquitetura do Job orquestrador de pendências</title>
+<desc>Job orquestrador varre ZZF e ZZG por registros com pendência de cliente, fornecedor ou produto. Cadastra o pendente, checa se a nota ficou sem mais nenhuma pendência. Se não, volta pro próximo pendente. Se sim, dispara um StartJob direcionado só pra aquela nota específica, e segue pro próximo pendente.</desc>
+<defs>
+<marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="680" height="420" fill="#ffffff"/>
+
+<g>
+<rect x="240" y="40" width="200" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="340" y="60" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#26215C">Job orquestrador</text>
+<text x="340" y="78" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#3C3489">Varre ZZF + ZZG</text>
+</g>
+
+<line x1="340" y1="96" x2="340" y2="122" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+<g>
+<rect x="240" y="124" width="200" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="340" y="144" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#26215C">Cadastra pendente</text>
+<text x="340" y="162" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#3C3489">Resolve a pendência</text>
+</g>
+
+<line x1="340" y1="180" x2="340" y2="206" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+<g>
+<rect x="230" y="208" width="220" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="340" y="228" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">Nota liberada?</text>
+<text x="340" y="246" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#444441">Checa ZZF + ZZG</text>
+</g>
+
+<line x1="340" y1="264" x2="340" y2="298" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<text x="352" y="282" font-family="sans-serif" font-size="12" fill="#5F5E5A">Sim</text>
+
+<path d="M230 236 L90 236" fill="none" stroke="#888780" stroke-width="0.5"/>
+<text x="120" y="226" font-family="sans-serif" font-size="12" fill="#5F5E5A">Não</text>
+
+<g>
+<rect x="240" y="300" width="200" height="44" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="340" y="316" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#04342C">Dispara StartJob</text>
+<text x="340" y="332" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#085041">Só essa nota</text>
+</g>
+
+<path d="M240 322 L90 322" fill="none" stroke="#888780" stroke-width="0.5"/>
+<path d="M90 322 L90 62" fill="none" stroke="#888780" stroke-width="0.5"/>
+<line x1="90" y1="62" x2="238" y2="62" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<text x="96" y="50" font-family="sans-serif" font-size="12" fill="#5F5E5A">↻ próximo pendente</text>
+
+<text x="340" y="385" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">Cada pendência resolvida libera e dispara 1 nota, isoladamente</text>
+<text x="340" y="403" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">Roxo: orquestrador · Verde-azulado: StartJob direcionado</text>
+</svg>

@@ -34,7 +34,8 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08
 	Private __cXEvento := "LOJ"
 
 	If Type("cEmpAnt") == "U" .Or. Empty(cEmpAnt) .Or. Select("SX6") == 0
-		RpcSetEnv(cEmpAPI, cFilAPI, Nil, Nil, "LOJ")
+		//RpcSetEnv(cEmpAPI, cFilAPI, Nil, Nil, "LOJ")
+		cFilAnt := cFilAPI
 		lAbreEnv := .T.
 	EndIf
 
@@ -42,7 +43,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08
 	cError := jJson:FromJson(cJson)
 
 	If !Empty(cError)
-		jRes['status']    := 400
+		jRes['status']    := 201
 		jRes['resultado'] := "Erro"
 		jRes['erro']      := "Payload"
 		jRes['mensagem']  := "JSON Invalido"
@@ -51,7 +52,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08
 		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 
 		If lAbreEnv
-			RpcClearEnv()
+			//RpcClearEnv()
 		EndIf
 
 		Return lRet
@@ -76,15 +77,16 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08
 		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 
 		If lAbreEnv
-			RpcClearEnv()
+			//RpcClearEnv()
 		EndIf
 
 		Return lRet
 	EndIf
 
 	If aEmpFil[1] != cEmpAnt .Or. aEmpFil[2] != cFilAnt
-		RPCClearEnv()
-		RpcSetEnv(aEmpFil[1], aEmpFil[2], Nil, Nil, "LOJ")
+		//RPCClearEnv()
+		//RpcSetEnv(aEmpFil[1], aEmpFil[2], Nil, Nil, "LOJ")
+		cFilAnt := aEmpFil[2]
 	EndIf
 
 	jRes := u_FATPI0801(oData, aEmpFil[2])
@@ -98,7 +100,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08
 	Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 
 	If lAbreEnv
-		RpcClearEnv()
+		//RpcClearEnv()
 	EndIf
 Return lRet
 
@@ -186,8 +188,15 @@ User Function FATPI0801(oData, cFilDest)
 	Local cFormaTrat    := ""
 	Local cAliSE1       := ""
 	Local cQrySE1       := ""
-	Local cParc         := 'A'
+	Local cParc         := '01'
 	Local cTipoTit
+	Local cFluxo
+	Local cNat
+	Local cXTipo
+	Local cProdLeg
+	Local cProdInt
+	Local nI
+	Local nStat
 
 	// --- 2. EXTRACAO SEGURA DE ARRAYS (HASPROPERTY) ---
 	If ValType(oData) == "J" .Or. ValType(oData) == "O"
@@ -215,7 +224,7 @@ User Function FATPI0801(oData, cFilDest)
 	EndIf
 
 	If Empty(cDocJson)
-		jRes['status']    := 400
+		jRes['status']    := 201
 		jRes['resultado'] := "Erro"
 		jRes['erro']      := "Documento"
 		jRes['mensagem']  := "Numero do Cupom/Recibo nao encontrado."
@@ -223,6 +232,20 @@ User Function FATPI0801(oData, cFilDest)
 	Else
 		cDocPad   := PadL(AllTrim(cDocJson), nTamDoc, "0")
 		cNumDupl  := PadL(AllTrim(cDocJson), TamSx3("F2_DUPL")[1], "0")
+	EndIf
+
+	cNat := U_FZ_STR_X(oData, "cod_NaturezaFinanceira")
+	cNat := PADR(ALLTRIM(cNat),TamSx3("ED_CODIGO")[1],'')
+
+	DbSelectArea("SED")
+	SED->(DbSetOrder(1))
+
+	If !SED->(DbSeek(xFilial("SED") + cNat))
+		jRes['status']    := 201
+		jRes['resultado'] := "Erro"
+		jRes['erro']      := "Natureza"
+		jRes['mensagem']  := "Natureza (cod_NaturezaFinanceira) não está cadastrada no sistema."
+		Return jRes
 	EndIf
 
 	cQryChk := "SELECT R_E_C_N_O_ AS REC FROM " + RetSqlName("SF2") + " WHERE F2_DOC='" + cDocPad + "' AND F2_SERIE='" + cSerPad + "' AND F2_FILIAL='" + xFilial("SF2") + "' AND D_E_L_E_T_=' '"
@@ -310,6 +333,8 @@ User Function FATPI0801(oData, cFilDest)
 			lCliFound := FATPI0805("LEG", cExpCli, @cEntC, @cEntL)
 			If lCliFound
 				cTipoCli := Posicione("SA1", 1, xFilial("SA1") + cEntC + cEntL, "A1_TIPO")
+				cNomeCli := Posicione("SA1", 1, xFilial("SA1") + cEntC + cEntL, "A1_NOME")
+				cNomeFin := cNomeCli
 			EndIf
 		EndIf
 
@@ -332,6 +357,38 @@ User Function FATPI0801(oData, cFilDest)
 	cNumVenGer := GetSxeNum("SL1", "L1_NUM")
 	cOrcamento := cNumVenGer
 	ConfirmSX8()
+
+	For nI := 1 To Len(oItnsJ)
+		cProdLeg := AllTrim(U_FZ_STR_X(oItnsJ[nI], 'cod_Produto'))
+		cProdInt := ""
+
+		DbSelectArea("SB1")
+		SB1->(DbOrderNickName("LEGADO"))
+		If SB1->(DbSeek(xFilial("SB1") + PadR(cProdLeg, TamSx3("B1_LEGADO")[1])))
+			cProdInt := AllTrim(SB1->B1_COD)
+			If Empty(cProdInt)
+				lOk := .F.
+				nStat := 201
+				jRes['status']    := nStat
+				jRes['resultado'] := "Falha"
+				jRes['erro']      := "Produto"
+				jRes['detalhe']   := cProdLeg
+				jRes['mensagem']  := "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg
+				Return jRes
+			Else
+				oItnsJ[nI]['cod_Produto'] := cProdInt
+			EndIf
+		Else
+			lOk := .F.
+			nStat := 201
+			jRes['status']    := nStat
+			jRes['resultado'] := "Falha"
+			jRes['erro']      := "Produto"
+			jRes['detalhe']   := cProdLeg
+			jRes['mensagem']  := "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg
+			Return jRes
+		Endif
+	Next nI
 
 	If cTipoOper == "D"
 		aRet := U_FZ_PRDEV_X(oItnsJ, oData, cEntC, cEntL, cDocPad, cSerie, "SA2", xFilial("SF1"), 0, "001")
@@ -432,13 +489,15 @@ User Function FATPI0801(oData, cFilDest)
 							For nPag := 1 To Len(aPagamentos)
 								oPag := aPagamentos[nPag]
 
-								cNatItm    := U_FZ_STR_X(oPag, "cod_NaturezaFinanceira")
-								cCCItm     := U_FZ_STR_X(oPag, "cod_CentroCusto")
+								cNatItm    := U_FZ_STR_X(oData, "cod_NaturezaFinanceira")
+								cCCItm     := oData['itens'][1]['cod_CentroCusto']
 								cFormaRec  := U_FZ_STR_X(oPag, "des_FormaRecebimento", "des_FormaPagamento")
 								cBandeira  := U_FZ_STR_X(oPag, "des_Bandeira")
 								cTransac   := U_FZ_STR_X(oPag, "num_Transacao")
 								cAutorizPg := U_FZ_STR_X(oPag, "des_Autorizacao")
 								cTipoTit   := U_FZ_STR_X(oPag, "des_FormaPag")
+								cFluxo     := U_FZ_STR_X(oPag, "flg_FluxoCaixa")
+								cXTipo     := U_FZ_STR_X(oData,"des_TipoNF")
 
 								nVlrTitulo := U_FZ_VAL_X(oPag, "vlr_Recebimento", "vlr_Pagamento")
 								If nVlrTitulo <= 0 ; nVlrTitulo := U_FZ_VAL_X(oPag, "vlr_Transacao") ; EndIf
@@ -479,12 +538,13 @@ User Function FATPI0801(oData, cFilDest)
 													SE1->E1_NUM     := cDocPad
 													SE1->E1_PARCELA := cParc
 													SE1->E1_TIPO    := IIF(!Empty(cTipoTit),cTipoTit,'RC')
-													SE1->E1_XTIPO   := 'RC'
+													SE1->E1_XTIPO   := IIF(Empty(cXTipo),'RC',cXTipo)
 													SE1->E1_NATUREZ := PadR(cNatItm, TamSx3("E1_NATUREZ")[1])
 													SE1->E1_CLIENTE := cCliPad
 													SE1->E1_LOJA    := cLojPad
 													SE1->E1_NOMCLI  := Posicione('SA1', 1, FWxFilial('SA1') + SE1->E1_CLIENTE + SE1->E1_LOJA, 'A1_NOME')
 													SE1->E1_EMISSAO := dConf
+													SE1->E1_EMIS1   := dConf
 													SE1->E1_VENCTO  := dVenc
 													SE1->E1_VENCREA := dVenc
 													SE1->E1_VALOR   := nVlrTitulo
@@ -494,9 +554,14 @@ User Function FATPI0801(oData, cFilDest)
 													SE1->E1_CCUSTO  := PadR(cCCItm, TamSx3("E1_CCUSTO")[1])
 													SE1->E1_XEVENTO := PadR(cDesOrig, TamSx3("E1_XEVENTO")[1])
 													SE1->E1_HIST    := Left(cHistPad, TamSx3("E1_HIST")[1])
+													SE1->E1_FLUXO   := cFluxo
 
 													If !Empty(cFormaTrat)
-														SE1->E1_FORMAPG := PadR(cFormaTrat, TamSx3("E1_FORMAPG")[1])
+														If AllTrim(cTipoTit) == 'CC' .OR. AllTrim(cTipoTit) == 'CD'
+															SE1->E1_FORMAPG := cTipoTit
+														Else
+															SE1->E1_FORMAPG := PadR(cFormaTrat, TamSx3("E1_FORMAPG")[1])
+														Endif
 													EndIf
 													If !Empty(cBandeira)
 														SE1->E1_CARTAO  := PadR(cBandeira, TamSx3("E1_CARTAO")[1])

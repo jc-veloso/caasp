@@ -77,12 +77,17 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 	Local cCn
 	Local lCest
 	Local lNcm
+	Local cPesqEmit
+	Local cPesqDest
+	Local lCli
+	Local lFor
 
 	Private __cBatch   := "1"
 
 	// --- 2. PREPARACAO DE AMBIENTE ---
 	If Type("cEmpAnt") == "U" .Or. Empty(cEmpAnt) .Or. Select("SX6") == 0
-		RpcSetEnv(cEmpAPI, cFilAPI, Nil, Nil, "FAT")
+		//RpcSetEnv(cEmpAPI, cFilAPI, Nil, Nil, "FAT")
+		cFilAnt := cFilAPI
 		lAbreEnv := .T.
 	EndIf
 
@@ -104,7 +109,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 		Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 		PutMv("MV_RESTNFE", cOldRestNfe)
 		If lAbreEnv
-			RpcClearEnv()
+			//RpcClearEnv()
 		EndIf
 		Return .T.
 	EndIf
@@ -168,6 +173,10 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 				EndIf
 			EndIf
 
+			If "TRANSF" $ cNatOp .And. ValType(aPrd) == "A" .And. Len(aPrd) > 0
+				cCnpjEmit := U_FZ_LIMPA_X(U_FZ_STR_X(oHead, 'des_EmitDocumento', 'cnpJ_FORNECEDOR'))
+			EndIf
+
 			If !Empty(cUsuario)
 				cQryAux := "SELECT A1_COD, A1_LOJA FROM " + RetSqlName("SA1") + " WHERE TRIM(A1_LEGADO) = '" + cUsuario + "' AND D_E_L_E_T_ = ' '"
 				cAliAux := GetNextAlias()
@@ -200,7 +209,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 						cTab  := "SA2"
 					ElseIf cCnpj == cCnpjEmit .And. cCnpj != cCnpjDest
 						cOper := "S"
-						cTab  := "SA2"
+						cTab  := "SA1"
 					Else
 						If Left(cAuxC, 1) $ "1/2"
 							cOper := "E"
@@ -244,6 +253,55 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 				Endif
 			ENDIF
 
+			cNat := U_FZ_STR_X(oHead, "cod_NaturezaFinanceira")
+			cNat := PADR(ALLTRIM(cNat),TamSx3("ED_CODIGO")[1],'')
+
+			DbSelectArea("SED")
+			SED->(DbSetOrder(1))
+
+			If !SED->(DbSeek(xFilial("SED") + cNat))
+				lOk := .F.
+				nStat := 201
+				jRes['status']    := nStat
+				jRes['resultado'] := "Falha"
+				jRes['erro']      := "Natureza"
+				jRes['detalhe']   := cNat
+				jRes['mensagem']  := "Natureza (cod_NaturezaFinanceira) não está cadastrada no sistema." + cNat
+			EndIf
+
+			If lIsTransf
+				cPesqDest := U_FZ_STR_X(oHead, "des_DestDocumento")
+				cPesqEmit := U_FZ_STR_X(oHead, "num_SubseccaoCNPJ")
+				DbSelectArea("SA1")
+				SA1->(DbSetOrder(3))
+				DbSelectArea("SA2")
+				SA2->(DbSetOrder(3))
+				lFor := .T.
+				lCli := .T.
+
+				If !SA2->(DbSeek(xFilial("SA2") + cPesqEmit))
+					lFor := .F.
+					lOk := .F.
+					nStat := 201
+					jRes['status']    := nStat
+					jRes['resultado'] := "Falha"
+					jRes['erro']      := 'Fornecedor'
+					jRes['detalhe']   := cPesqEmit
+					jRes['mensagem']  := "Filial Origem não está cadastrada como Fornecedor."
+				Endif
+
+				If !SA1->(DbSeek(xFilial("SA1") + cPesqDest))
+					lCli := .F.
+					lOk := .F.
+					nStat := 201
+					jRes['status']    := nStat
+					jRes['resultado'] := "Falha"
+					jRes['erro']      := 'Cliente'
+					jRes['detalhe']   := AllTrim(U_FZ_STR_X(oHead, 'cod_Exportacao'))
+					jRes['mensagem']  := "Filial Destino não está cadastrada como Cliente."
+				Endif
+
+			Endif
 
 			If Empty(cCod)
 				//If fContemStr(',', cCod)
@@ -369,12 +427,12 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 							jRes['resultado'] := "Falha"
 							jRes['erro']      := "NCM/CEST"
 							jRes['detalhe']   := IIF(!Empty(aPrd[nI]['des_ProdutoNCM']),aPrd[nI]['des_ProdutoNCM'],'Nil') + '/' + IIF(!Empty(aPrd[nI]['des_ProdutoCEST']),aPrd[nI]['des_ProdutoCEST'],'Nil')
-							jRes['mensagem']  := "NCM e/ou CEST não cadastrado."
+							jRes['mensagem']  := "NCM e/ou CEST não cadastrado." + Space(1) + IIF(!Empty(aPrd[nI]['des_ProdutoNCM']),aPrd[nI]['des_ProdutoNCM'],'Nil') + '/' + IIF(!Empty(aPrd[nI]['des_ProdutoCEST']),aPrd[nI]['des_ProdutoCEST'],'Nil')
 							Self:setStatus(nStat)
 							Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 							PutMv("MV_RESTNFE", cOldRestNfe)
 							If lAbreEnv
-								RpcClearEnv()
+								//RpcClearEnv()
 							EndIf
 							Return .T.
 						EndIf
@@ -393,7 +451,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 						Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 						PutMv("MV_RESTNFE", cOldRestNfe)
 						If lAbreEnv
-							RpcClearEnv()
+							//RpcClearEnv()
 						EndIf
 						Return .T.
 					EndIf
@@ -511,7 +569,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 									aEmpDest := U_FZ_SM0_X(cCnpjDest)
 									If Len(aEmpDest) >= 2
 										cFilDest := aEmpDest[2]
-										aRetTransf := U_FATPI0101(aPrd, oHead, cCnpjEmit, cNF, cSer, aEmpDest)
+										aRetTransf := U_FATPI0101(aPrd, oHead, cCnpjEmit, cNF, cSer, aEmpDest,lIsTransf)
 
 										If aRetTransf[1]
 											jRes['info'] += " | CONVENIOS: Entrada automatica gerada na filial " + cFilDest + "."
@@ -546,7 +604,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 						If aRet[1]
 
 							cPCNew := aRet[3]
-							aRet := U_FZ_PRON_X(aPrd, oHead, cCod, cLoja, cNF, cSer, cPCNew, cTab, cFil, 0, cCondSafe)
+							aRet := U_FZ_PRON_X(aPrd, oHead, cCod, cLoja, cNF, cSer, cPCNew, cTab, cFil, 0, cCondSafe,lIsTransf)
 							If aRet[1]
 								nStat := 201
 								jRes['status']    := nStat
@@ -597,7 +655,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01
 	FreeObj(jRes)
 
 	If lAbreEnv
-		RpcClearEnv()
+		//RpcClearEnv()
 	EndIf
 
 Return lRet
@@ -690,6 +748,8 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 	Local cAliAux  := ""
 	Local aEmpFil
 	Local cCnpjU
+	Local nDespesa
+	Local cNewSC7
 
 	// ---> PROTECAO ANTI-ERRO 500: Busca Segura no Dicionario <---
 	Local aTamQtd  := TamSx3("C7_QUANT")
@@ -706,8 +766,9 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 
 	if Len(aEmpFil) > 0
 		If aEmpFil[1] != cEmpAnt .Or. aEmpFil[2] != cFilAnt
-			RPCClearEnv()
-			RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			//RPCClearEnv()
+			//RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			cFilAnt := aEmpFil[2]
 		EndIf
 	Endif
 
@@ -760,6 +821,7 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 
 		nQtd := Round(U_FZ_VAL_X(aPrd[nI], 'qtd_Produto'), nTamQtd)
 		nPrc := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario',), nTamPrc)
+		nDespesa := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoOutros',)
 
 		nPrcArr := nPrc
 		If nPrcArr <= 0
@@ -773,6 +835,7 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 		aPrd[nI]['num_Sequencial'] := cItemSeq
 
 		nDescItm := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario'), 2) * nQtd
+		cOper := ALLTRIM(RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST']))
 
 		aLin := {}
 		AAdd(aLin, {"C7_ITEM", cItemSeq, Nil})
@@ -780,8 +843,10 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 		AAdd(aLin, {"C7_UM", cUm, Nil})
 		AAdd(aLin, {"C7_QUANT", nQtd, Nil})
 		AAdd(aLin, {"C7_PRECO", nPrcArr, Nil})
+		AAdd(aLin, {"C7_DESPESA", nDespesa, Nil})
 		AAdd(aLin, {"C7_VLDESC", nDescItm, Nil})
 		// ---> C7_TOTAL foi omitido propositalmente! <---
+		AAdd(aLin, {"C7_OPER", cOper, Nil})
 		AAdd(aLin, {"C7_TES", cTE, Nil})
 		AAdd(aLin, {"C7_CONTA", PadR(cCta, 20), Nil})
 		AAdd(aLin, {"C7_CC", PadR(cCC, TamSx3("C7_CC")[1]), Nil})
@@ -810,10 +875,12 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 			nBasST   := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoICMSSTBaseCalculo')
 			nVlrPis  := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoPIS')
 			nVlrCof  := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoConfins', 'vlr_ProdutoCOFINS')
+			nDespesa := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoOutros')
 
 			cQryUpd := "UPDATE " + RetSqlName("SC7") + " SET "
 			cQryUpd += "C7_CONAPRO = 'L', C7_RESIDUO = '', "
 			cQryUpd += "C7_PRECO = " + StrTran(cValToChar(nPrc), ",", ".") + ", "
+			cQryUpd += "C7_DESPESA = " + StrTran(cValToChar(nDespesa), ",", ".") + ", "
 			cQryUpd += "C7_TOTAL = " + StrTran(cValToChar(nTotItem), ",", ".") + ", "
 			cQryUpd += "C7_VLDESC = " + StrTran(cValToChar(nDescItm), ",", ".") + ", "
 			cQryUpd += "C7_VALICM = " + StrTran(cValToChar(nVlrIcm), ",", ".")  + ", "
@@ -832,13 +899,46 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 	Else
 		aRet := {.F., aEx[2], ""}
 	EndIf
+
+	For nI := 1 To Len(aPrd)
+		nDespesa := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoOutros',)
+		cItemSql := aPrd[nI]['num_Sequencial']
+
+		//SC7
+		cNewSC7 := GetNextAlias()
+		BeginSQL Alias cNewSC7
+					select 
+                        SC7.R_E_C_N_O_ AS RECNO
+                    from
+                        %table:SC7% SC7
+                     WHERE
+                    SC7.%notDel%
+		            AND TRIM(SC7.C7_NUM) = %exp:(ALLTRIM(cPC))%
+					AND TRIM(SC7.C7_ITEM) = %exp:(ALLTRIM(cItemSql))%
+		            AND TRIM(SC7.C7_FILIAL) = %exp:(ALLTRIM(SC7->C7_FILIAL))%
+		ENDSQL
+
+		(cNewSC7)->(dbGoTop())
+
+		While !(cNewSC7)->(Eof())
+			SC7->(DbGoTo((cNewSC7)->RECNO))
+			If RecLock("SC7",.F.)
+				SC7->C7_DESPESA  := nDespesa
+				SC7->(MsUnlock())
+			ENDIF
+			(cNewSC7)->(DbSkip())
+		End
+		(cNewSC7)->(DbCloseArea())
+
+	Next nI
+
 Return aRet
 
 
 // ==========================================================================
 // COMPRAS (CLASSIFICACAO DA NOTA) - MOTOR MATA103
 // ==========================================================================
-User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, nAval, cCond)
+User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, nAval, cCond, lIsTransf)
 	Local aRet       := {.F.,""}
 	Local aCab       := {}
 	Local aIt        := {}
@@ -892,19 +992,31 @@ User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, 
 	Local aEmpFil
 	Local cCnpjU
 	Local dDataDigit
+	Local nValFreteUnit
+	Local nValFrete
 
 	// Variaveis Financeiras/Bancarias
 	Local cEvtMod    := U_FZ_STR_X(oHead, "cod_EventoModalidade", "cod_Evento")
 	Local cNatJson   := U_FZ_STR_X(oHead, "cod_NaturezaFinanceira")
 	Local cTransacao := U_FZ_STR_X(oHead, "num_Transacao")
+	Local nDespesa
 
-	cCnpjU  := U_FZ_LIMPA_X(U_FZ_STR_X(oHead, "num_SubseccaoCNPJ", "num_SubseccaoCNPJ"))
+	If Empty(lIsTransf)
+		lIsTransf := .F.
+	Endif
+
+	If lIsTransf
+		cCnpjU  := U_FZ_LIMPA_X(U_FZ_STR_X(oHead, "des_DestDocumento", "des_DestDocumento"))
+	else
+		cCnpjU  := U_FZ_LIMPA_X(U_FZ_STR_X(oHead, "num_SubseccaoCNPJ", "num_SubseccaoCNPJ"))
+	Endif
 	aEmpFil := FATPIEMP(cCnpjU)
 
 	if Len(aEmpFil) > 0
 		If aEmpFil[1] != cEmpAnt .Or. aEmpFil[2] != cFilAnt
-			RPCClearEnv()
-			RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			//RPCClearEnv()
+			//RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			cFilAnt := aEmpFil[2]
 		EndIf
 	Endif
 
@@ -978,6 +1090,8 @@ User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, 
 	nVlrMercV := nTotNF
 	nVlrBrutV := nTotNF + nVlrFrete + nVlrSeg + nVlrOutr - nVlrDesc
 
+	nDespesa := U_FZ_VAL_X(oHead, 'vlr_Outros')
+
 	If Len(aParcLegacy) == 0 .And. nVlrBrutV > 0
 		AAdd(aParcLegacy, {"1", dEmissao, nVlrBrutV})
 	EndIf
@@ -987,6 +1101,8 @@ User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, 
 	Else
 		cNatReal := PadR(U_FZ_NAT_X(cFornSql, cLojaSql, oHead), TamSx3("E2_NATUREZ")[1])
 	EndIf
+
+	nValFrete := Round(U_FZ_VAL_X(oHead, 'vlr_Frete'), 4)
 
 	AAdd(aCab, {"F1_DOC", PadR(cValToChar(cDoc), 9), Nil})
 	AAdd(aCab, {"F1_SERIE", PadR(cValToChar(cSer), 3), Nil})
@@ -1001,8 +1117,10 @@ User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, 
 	AAdd(aCab, {"F1_COND", cCond, Nil})
 	AAdd(aCab, {"F1_VALBRUT", nVlrBrutV, Nil})
 	AAdd(aCab, {"F1_VALMERC", nVlrMercV, Nil})
+	//AAdd(aCab, {"F1_DESPESA", nDespesa, Nil})
 	AAdd(aCab, {"F1_DESCONT", nVlrDesc, Nil}) // <--- CORREÇÃO: Injetando o desconto global no cabeçalho
 	AAdd(aCab, {"F1_EST", cUFEntity, Nil})
+	AAdd(aCab, {"F1_FRETE", nValFrete, Nil})
 	AAdd(aCab, {"E2_NATUREZ", PADR(ALLTRIM(cNatReal),nTamNat,''), Nil})
 
 	For nI := 1 To Len(aPrd)
@@ -1013,11 +1131,13 @@ User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, 
 
 			nPrc := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario'), 4)
 			nDescItm := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd // <--- CORREÇÃO: Extraindo o desconto do item
+			nValFreteUnit := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoFrete'), 4)
 
 			cProdKey := AllTrim(PadR(cValToChar(AllTrim(aPrd[nI]['cod_Produto'])), 30))
 			cItemSeq := PadL(cValToChar(nI), TamSx3("D1_ITEM")[1], "0")
 			cCta := PadR(cValToChar(U_FZ_ACC_X(cProdKey)), 20)
 			cCC  := U_FZ_STR_X(aPrd[nI], 'cod_CentroCusto')
+			nDespesa := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoOutros')
 
 			If Empty(cCC)
 				cCC := U_FZ_CC_X(cProdKey)
@@ -1028,7 +1148,7 @@ User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, 
 			SB1->(DbSetOrder(1))
 			SB1->(DbSeek(xFilial("SB1") + PadR(cProdKey, 30)))
 			cUm := SB1->B1_UM
-			cOper := RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST'])
+			cOper := ALLTRIM(RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST']))
 
 			aLin := {}
 			AAdd(aLin, {"D1_FILIAL", xFilial("SD1"), Nil})
@@ -1039,14 +1159,17 @@ User Function FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, 
 			AAdd(aLin, {"D1_VUNIT", nPrc, Nil})
 			AAdd(aLin, {"D1_TOTAL", Round(nQtd * nPrc, 2), Nil})
 			AAdd(aLin, {"D1_VALDESC", nDescItm, Nil}) // <--- CORREÇÃO: Injetando o desconto do item para o MATA103
+			AAdd(aLin, {"D1_OPER", cOper, Nil})
 			AAdd(aLin, {"D1_TES", cTE, Nil})
 			AAdd(aLin, {"D1_CONTA", cCta, Nil})
 			AAdd(aLin, {"D1_CC", cCC, Nil})
-			AAdd(aLin, {"D1_OPER", cOper, Nil})
 			AAdd(aLin, {"D1_CF", PadR(cValToChar(aPrd[nI]['cod_ProdutoCFOP']), TamSx3("D1_CF")[1]), Nil})
 			AAdd(aLin, {"D1_FORNECE", PadR(cValToChar(cForn), 6), Nil})
 			AAdd(aLin, {"D1_LOJA", PadR(cValToChar(cLoja), 2), Nil})
 			AAdd(aLin, {"D1_LOCAL", PadR(cValToChar(U_FZ_LOC_X(cProdKey)), 2), Nil})
+			AAdd(aLin, {"D1_VALFRE", nValFreteUnit, Nil})
+			AAdd(aLin, {"D1_DESPESA", nDespesa, Nil})
+
 
 			If !Empty(cPC)
 				AAdd(aLin, {"D1_PEDIDO", cPC, Nil})
@@ -1269,8 +1392,9 @@ User Function FZ_PRDEV_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 
 	If Len(aEmpFil) > 0
 		If aEmpFil[1] != cEmpAnt .Or. aEmpFil[2] != cFilAnt
-			RPCClearEnv()
-			RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			//RPCClearEnv()
+			//RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			cFilAnt := aEmpFil[2]
 		EndIf
 	Endif
 
@@ -1677,6 +1801,8 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 	Local nVlrTitulo  := 0
 	Local cFormaTrat  := ""
 	Local cParcela    := ""
+	Local nFrete := 0
+	Local cCodCST     := ''
 
 	Local nPicmItem   := 0
 	Local nBicmItem   := 0
@@ -1744,8 +1870,10 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 					EndIf
 				EndIf
 
-				If cModDoc == "55" .Or. cModDoc == "65"
-					cEspecie := "SPED"
+				If cModDoc == "55"
+				    cEspecie := "SPED"
+				ElseIf cModDoc == "65"
+					cEspecie := "NFCE"
 				Else
 					cEspecie := "NFE"
 				EndIf
@@ -1811,6 +1939,7 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 																							nDescItm    := Round(U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoDescontoUnitario') * nQtdItm, 2)
 																							nVlrBrutItm := Round(nQtdItm * nVlrUniItm, 2)
 																							nVlrLiqItm  := Round(nVlrBrutItm - nDescItm, 2)
+																							cCodCST     := ALLTRIM(U_FZ_STR_X(aPrd[nX], 'cod_ProdutoCST'))
 
 																							// Extracao Fiscal
 																							nPicmItem   := U_FZ_VAL_X(aPrd[nX], 'pct_ProdutoICMS')
@@ -1822,6 +1951,9 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 																							nVicmDeson  := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoICMSDesonerado')
 																							nPReducIcm  := U_FZ_VAL_X(aPrd[nX], 'pct_ProdutoReducaoICMS')
 																							nPReducSt   := U_FZ_VAL_X(aPrd[nX], 'pct_ProdutoReducaoICMSST')
+																							nFrete      := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoFrete')
+																							nOutros     := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoOutros')
+																							nVlrLiqItm  := nVlrLiqItm + nFrete
 
 																							nAliqIcm    := nPicmItem
 																							nIcmItm     := nVicmItem
@@ -1833,6 +1965,51 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 
 																							cCustoSD2  := U_FZ_STR_X(aPrd[nX], 'cod_CentroCusto')
 																							If Empty(cCustoSD2) ; cCustoSD2 := cCustoHead ; EndIf
+
+																							If Empty(cCfopItm)
+                                                                                            cCfopItm := '000'
+																							Endif
+
+																							If Empty(cTesItm)
+                                                                                            cTesItm := '999'
+																							Endif
+
+                                                                                            cNewSFT := GetNextAlias()
+																							BeginSQL Alias cNewSFT
+																								select 
+                                                                                                    SFT.R_E_C_N_O_ AS RECNO,
+																									SFT.FT_PRODUTO
+                                                                                                from
+                                                                                                    %table:SFT% SFT
+                                                                                               WHERE
+                                                                                                    SFT.%notDel%
+		                                                                                        AND TRIM(SFT.FT_NFISCAL) = %exp:(ALLTRIM(SF2->F2_DOC))%
+		                                                                                        AND TRIM(SFT.FT_FILIAL) = %exp:(ALLTRIM(SF2->F2_FILIAL))%
+		                                                                                        AND TRIM(SFT.FT_SERIE) = %exp:(ALLTRIM(SF2->F2_SERIE))%																					
+		                                                                                        AND TRIM(SFT.FT_CLIEFOR) = %exp:(ALLTRIM(SF2->F2_CLIENTE))%
+		                                                                                        AND TRIM(SFT.FT_LOJA) = %exp:(ALLTRIM(SF2->F2_LOJA))%
+		                                                                                        AND TRIM(SFT.FT_TIPOMOV) = 'S'  
+																								AND TRIM(SFT.FT_ITEM) = %exp:(ALLTRIM(cItemSql))%  
+	                                                                                      ENDSQL
+
+	                                                                                    (cNewSFT)->(dbGoTop())
+
+	                                                                                    While !(cNewSFT)->(Eof())
+                                                                                            SFT->(DbGoTo((cNewSFT)->RECNO))
+		                                                                                    If RecLock("SFT",.F.)
+		                                                                                        SFT->FT_ALIQICM  := nPicmItem
+			                                                                                    SFT->FT_BASEICM  := nBicmItem
+			                                                                                    SFT->FT_VALICM   := nVicmItem
+																								SFT->FT_ISENICM  := nBIcmsIsen
+			                                                                                    SFT->FT_OUTRICM  := nBicmStItem
+			                                                                                    SFT->FT_CLASFIS  := ALLTRIM(Posicione('SB1', 1, FWxFilial('SB1') + (cNewSFT)->FT_PRODUTO, 'B1_ORIGEM') + cCodCST)
+																								SFT->FT_RECISS   := '2'
+			                                                                                    SFT->FT_DESPESA  := nOutros
+			                                                                                    SFT->(MsUnlock())
+	                                                                                      ENDIF
+		                                                                                    (cNewSFT)->(DbSkip())
+	                                                                                    End
+	                                                                                    (cNewSFT)->(DbCloseArea())
 
 																								cQryRec := "UPDATE " + RetSqlName("SD2") + " SET "
 																								cQryRec += "D2_CF = '" + cCfopItm + "', "
@@ -1861,16 +2038,19 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
                     
                     cQryRec += " WHERE D2_DOC='" + cDocPad + "' AND D2_SERIE='" + cSerPad + "' AND D2_CLIENTE='" + cCliPad + "' AND D2_LOJA='" + cLojaPad + "' AND D2_ITEM='" + cItemSql + "' AND D_E_L_E_T_=' '"
                     TCSqlExec(cQryRec)
+	
 
                     nPosGrp := AScan(aGrpSF3, {|x| x[1] == cCfopItm .And. x[2] == nAliqIcm})
                     If nPosGrp == 0
-                        AAdd(aGrpSF3, {cCfopItm, nAliqIcm, nVlrLiqItm, nIcmItm,nBicmItem,nBicmStItem,nBIcmsIsen})
+                        AAdd(aGrpSF3, {cCfopItm, nAliqIcm, nVlrLiqItm, nIcmItm,nBicmItem,nBicmStItem,nBIcmsIsen,nFrete,nOutros})
                     Else
                         aGrpSF3[nPosGrp][3] += nVlrLiqItm
                         aGrpSF3[nPosGrp][4] += nIcmItm
                         aGrpSF3[nPosGrp][5] += nBicmItem
                         aGrpSF3[nPosGrp][6] += nBicmStItem
                         aGrpSF3[nPosGrp][7] += nBIcmsIsen
+						aGrpSF3[nPosGrp][8] += nFrete
+						aGrpSF3[nPosGrp][9] += nOutros
                     EndIf
                 EndIf
             Next nX
@@ -1920,11 +2100,14 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
             RecLock("SF3", .T.)
             SF3->F3_FILIAL  := xFilial("SF3")
             SF3->F3_EMISSAO := dEmiss
+			SF3->F3_ENTRADA := dEmiss
+			SF3->F3_RECISS  := '2'
 			SF3->F3_ESTADO  := SF2->F2_EST
 			SF3->F3_CHVNFE  := SF2->F2_CHVNFE
             SF3->F3_NFISCAL := cDocPad
             SF3->F3_SERIE   := cSerPad
             SF3->F3_CLIEFOR := cCliPad
+			SF3->F3_ESPECIE := SF2->F2_ESPECIE
             SF3->F3_LOJA    := cLojaPad
             SF3->F3_CFO     := aGrpSF3[nX][1]
             SF3->F3_ALIQICM := aGrpSF3[nX][2]
@@ -1933,6 +2116,7 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
             SF3->F3_BASEICM := aGrpSF3[nX][5]
             SF3->F3_OUTRICM := aGrpSF3[nX][6]
             SF3->F3_ISENICM := aGrpSF3[nX][7]
+			SF3->F3_DESPESA := aGrpSF3[nX][9]
 
 
             SF3->F3_ESPECIE := PadR(cEspecie, TamSx3("F3_ESPECIE")[1]) 
@@ -2094,6 +2278,9 @@ Static Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
     Local nVicmDeson  := 0
     Local nPReducIcm  := 0
     Local nPReducSt   := 0
+	Local nDespesa    := 0
+	Local cNewSFT
+	Local cNewSD1
 
     cNatItm     := GET_REC_JSON(oHead, "cod_NaturezaFinanceira", "", "")
     cCCItm      := GET_REC_JSON(oHead, "cod_CentroCusto", "", "")
@@ -2190,6 +2377,7 @@ Static Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
                 nVicmDeson  := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoICMSDesonerado')
                 nPReducIcm  := U_FZ_VAL_X(aPrd[nX], 'pct_ProdutoReducaoICMS')
                 nPReducSt   := U_FZ_VAL_X(aPrd[nX], 'pct_ProdutoReducaoICMSST')
+				nDespesa    := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoOutros')
 
                 nPercDesc := 0
                 If nVlrBrutItm > 0
@@ -2208,10 +2396,9 @@ Static Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
                 
                 // <--- CORREÇÃO: D1_VALDESC (Valor Monetário) e D1_DESC (Percentual) aplicados corretamente --->
                 cQryRec += "D1_TES = '" + cTesItm + "', "
-                cQryRec += "D1_VUNIT = " + StrTran(cValToChar(nVlrUniItm), ",", ".") + ", "
-                cQryRec += "D1_TOTAL = " + StrTran(cValToChar(nVlrBrutItm), ",", ".") + ", " 
-                cQryRec += "D1_VALDESC = " + StrTran(cValToChar(nDescItm), ",", ".") + ", "
-                cQryRec += "D1_DESC = " + StrTran(cValToChar(nPercDesc), ",", ".") 
+                //cQryRec += "D1_TOTAL = " + StrTran(cValToChar(nVlrBrutItm), ",", ".") + ", " 
+                //cQryRec += "D1_VALDESC = " + StrTran(cValToChar(nDescItm), ",", ".") + ", "
+                //cQryRec += "D1_DESC = " + StrTran(cValToChar(nPercDesc), ",", ".") 
                 
                 // Injeções Fiscais Condicionais
                 /*If Len(TamSx3("D1_PICM")) > 0  ; cQryRec += ", D1_PICM = " + StrTran(cValToChar(nPicmItem), ",", ".") ; EndIf
@@ -2225,6 +2412,68 @@ Static Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
 
                 cQryRec += " WHERE D1_DOC='" + cDocPad + "' AND D1_SERIE='" + cSerPad + "' AND D1_FORNECE='" + cFornPad + "' AND D1_LOJA='" + cLojaPad + "' AND D1_ITEM='" + cItemSql + "' AND D_E_L_E_T_=' '"
                 TCSqlExec(cQryRec)
+
+
+/*
+                //SFT
+				cNewSFT := GetNextAlias()
+				BeginSQL Alias cNewSFT
+					select 
+                        SFT.R_E_C_N_O_ AS RECNO
+                    from
+                        %table:SFT% SFT
+                     WHERE
+                    SFT.%notDel%
+		            AND TRIM(SFT.FT_NFISCAL) = %exp:(ALLTRIM(SF1->F1_DOC))%
+		            AND TRIM(SFT.FT_FILIAL) = %exp:(ALLTRIM(SF1->F1_FILIAL))%
+		            AND TRIM(SFT.FT_SERIE) = %exp:(ALLTRIM(SF1->F1_SERIE))%																					
+		            AND TRIM(SFT.FT_CLIEFOR) = %exp:(ALLTRIM(SF1->F1_FORNECE))%
+		            AND TRIM(SFT.FT_LOJA) = %exp:(ALLTRIM(SF1->F1_LOJA))%
+		            AND TRIM(SFT.FT_TIPOMOV) = 'E'  
+					AND TRIM(SFT.FT_ITEM) = %exp:(ALLTRIM(cItemSql))%  
+	            ENDSQL
+
+	            (cNewSFT)->(dbGoTop())
+
+	            While !(cNewSFT)->(Eof())
+                SFT->(DbGoTo((cNewSFT)->RECNO))
+		        If RecLock("SFT",.F.)
+			        SFT->FT_DESPESA  := nDespesa
+			        SFT->(MsUnlock())
+	            ENDIF
+		        (cNewSFT)->(DbSkip())
+	            End
+	            (cNewSFT)->(DbCloseArea())
+
+                //SD1
+				cNewSD1 := GetNextAlias()
+				BeginSQL Alias cNewSD1
+					select 
+                        SD1.R_E_C_N_O_ AS RECNO
+                    from
+                        %table:SD1% SD1
+                     WHERE
+                    SD1.%notDel%
+		            AND TRIM(SD1.D1_DOC) = %exp:(ALLTRIM(SF1->F1_DOC))%
+		            AND TRIM(SD1.D1_FILIAL) = %exp:(ALLTRIM(SF1->F1_FILIAL))%
+		            AND TRIM(SD1.D1_SERIE) = %exp:(ALLTRIM(SF1->F1_SERIE))%																					
+		            AND TRIM(SD1.D1_FORNECE) = %exp:(ALLTRIM(SF1->F1_FORNECE))%
+		            AND TRIM(SD1.D1_LOJA) = %exp:(ALLTRIM(SF1->F1_LOJA))%
+					AND TRIM(SD1.D1_ITEM) = %exp:(ALLTRIM(cItemSql))%  
+	            ENDSQL
+
+	            (cNewSD1)->(dbGoTop())
+
+	            While !(cNewSD1)->(Eof())
+                SD1->(DbGoTo((cNewSD1)->RECNO))
+		        If RecLock("SD1",.F.)
+			        SD1->D1_DESPESA  := nDespesa
+			        SD1->(MsUnlock())
+	            ENDIF
+		        (cNewSD1)->(DbSkip())
+	            End
+	            (cNewSD1)->(DbCloseArea())*/
+				
             EndIf
         Next nX
     EndIf
@@ -2531,7 +2780,7 @@ Return PadR(cRet, TamSx3("D1_CF")[1])
 | Descritivo: FATPI0101 - Auto-Entrada de Transferencia (CONVENIOS)          |
 +----------------------------------------------------------------------------+
 */
-User Function FATPI0101(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest)
+User Function FATPI0101(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest, lIsTransf)
 	Local aRet       := {.F., ""}
 	Local cEmpAtu    := cEmpAnt
 	Local cFilAtu    := cFilAnt
@@ -2549,8 +2798,9 @@ User Function FATPI0101(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest)
 	Local cMsgTes    := ""
 
 	// 1. Troca de Ambiente para Filial de Destino
-	RpcClearEnv()
-	RpcSetEnv(aEmpDest[1], aEmpDest[2], Nil, Nil, "FAT")
+	//RpcClearEnv()
+	//RpcSetEnv(aEmpDest[1], aEmpDest[2], Nil, Nil, "FAT")
+	cFilAnt := aEmpDest[2]
 
 	// -> DESLIGA OBRIGATORIEDADE DE PEDIDO DE COMPRAS (APENAS PARA TRANSFERENCIA) <-
 	cOldPcNfe := SuperGetMv("MV_PCNFE", .F., "2")
@@ -2612,7 +2862,7 @@ User Function FATPI0101(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest)
 
 		If lOkTes
 			// 4. Chama o motor de Entrada
-			aRet := U_FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, "", "SA2", aEmpDest[2], 0, cCondSafe)
+			aRet := U_FZ_PRON_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, "", "SA2", aEmpDest[2], 0, cCondSafe,lIsTransf)
 		Else
 			aRet := {.F., cMsgTes}
 		EndIf
@@ -2621,8 +2871,9 @@ User Function FATPI0101(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest)
 	PutMv("MV_PCNFE", cOldPcNfe)
 
 	// 5. Retorna ao Ambiente Original da API
-	RpcClearEnv()
-	RpcSetEnv(cEmpAtu, cFilAtu, Nil, Nil, "FAT")
+	//RpcClearEnv()
+	//RpcSetEnv(cEmpAtu, cFilAtu, Nil, Nil, "FAT")
+	cFilAnt := cFilAtu
 
 Return aRet
 
@@ -2648,7 +2899,7 @@ User Function FZ_PROS_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTra
 	Local cEstCli    := U_FZ_GETEST(cTab, cCli, cLoja)
 	Local cUmDB      := ""
 	Local cLocDB     := ""
-	Local cModDoc    := U_FZ_STR_X(oHead, 'cod_Mod', 'modelo')
+	Local cModDoc    := U_FZ_STR_X(oHead, 'cod_Mod')
 	Local cEspecie   := ""
 	Local cNotaOri
 	Local cSerieOri
@@ -2658,8 +2909,8 @@ User Function FZ_PROS_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTra
 	Local bFiscalSF2 := {|| .T.}
 	Local bFiscalSD2 := {|| .T.}
 
-	Local nF2FILIAL, nF2TIPO, nF2DOC, nF2SERIE, nF2EMISSAO, nF2CLIENTE, nF2LOJA, nF2COND, nF2ESPECIE, nF2EST
-	Local nD2FILIAL, nD2DOC, nD2SERIE, nD2CLIENTE, nD2LOJA, nD2TIPO, nD2COD, nD2QUANT, nD2PRCVEN, nD2TOTAL, nD2TES, nD2CF, nD2CC, nD2ITEM, nD2UM, nD2LOCAL, nD2DESCON
+	Local nF2FILIAL, nF2TIPO, nF2DOC, nF2SERIE, nF2EMISSAO, nF2CLIENTE, nF2LOJA, nF2COND, nF2ESPECIE, nF2EST, nF2FRETE
+	Local nD2FILIAL, nD2DOC, nD2SERIE, nD2CLIENTE, nD2LOJA, nD2TIPO, nD2COD, nD2QUANT, nD2PRCVEN, nD2TOTAL, nD2TES, nD2CF, nD2CC, nD2ITEM, nD2UM, nD2LOCAL, nD2DESCON, nD2FRETE
 
 	Local nQtdCalc   := 0
 	Local nPrcCalc   := 0
@@ -2669,6 +2920,9 @@ User Function FZ_PROS_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTra
 	Local nTamSerie  := TamSx3("D2_SERIORI")[1]
 	Local cCnpjU
 	Local aEmpFil
+	Local nValFrete := U_FZ_VAL_X(oHead, 'vlr_Frete')
+	Local nFreteItem
+	Local cCnpjCli  := U_FZ_LIMPA_X(U_FZ_STR_X(oHead, "des_DestDocumento", "des_DestDocumento"))
 
 	Private lMsErroAuto := .F.
 
@@ -2677,20 +2931,31 @@ User Function FZ_PROS_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTra
 
 	If Len(aEmpFil) > 0
 		If aEmpFil[1] != cEmpAnt .Or. aEmpFil[2] != cFilAnt
-			RPCClearEnv()
-			RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			//RPCClearEnv()
+			//RpcSetEnv(aEmpFil[1], aEmpFil[2])
+			cFilAnt := aEmpFil[2]
 		EndIf
 	Endif
 
-	If cModDoc == "55"
+	If ALLTRIM(cModDoc) == "55"
 		cEspecie := "SPED"
-	Else
+	Elseif ALLTRIM(cModDoc) == '65'
+		cEspecie := "NFCE"
+	ELSE
 		cEspecie := "NFE"
 	EndIf
 
 	cTipoOper := IIF(Alltrim(cTab) == 'SA2', 'D','N')
 
+
+
 	If lIsTransf
+		DbSelectArea("SA1")
+		SA1->(DbSetOrder(3))
+		If SA1->(DbSeek(xFilial("SA1") + cCnpjCli))
+			cCli  := SA1->A1_COD
+			cLoja := SA1->A1_LOJA
+		Endif
 		cTipoOper := 'N'
 	Endif
 
@@ -2706,6 +2971,7 @@ User Function FZ_PROS_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTra
 	nF2COND    := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_COND"})
 	nF2ESPECIE := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_ESPECIE"})
 	nF2EST     := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_EST"})
+	nF2FRETE   := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_FRETE"})
 
 	nD2FILIAL  := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_FILIAL"})
 	nD2DOC     := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_DOC"})
@@ -2727,6 +2993,7 @@ User Function FZ_PROS_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTra
 	nD2NFORI   := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_NFORI"})
 	nD2SERORI  := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_SERIORI"})
 	nD2ITORI   := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_ITEMORI"})
+	nD2FRETE   := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_VALFRE"})
 
 	For nI := 1 To Len(aStruSF2)
 		If aStruSF2[nI][2] == "N"
@@ -2746,97 +3013,100 @@ User Function FZ_PROS_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTra
 				If nF2EMISSAO > 0 ; aCabs[nF2EMISSAO] := dEmissao ; EndIf
 					If nF2CLIENTE > 0 ; aCabs[nF2CLIENTE] := cCli ; EndIf
 						If nF2LOJA > 0    ; aCabs[nF2LOJA]    := cLoja ; EndIf
-							If nF2TIPO > 0    ; aCabs[nF2TIPO]    := cTipoOper ; EndIf
-								If nF2COND > 0    ; aCabs[nF2COND]    := cCond ; EndIf
-									If nF2ESPECIE > 0 ; aCabs[nF2ESPECIE] := PadR(cEspecie, TamSx3("F2_ESPECIE")[1]) ; EndIf
-										If nF2EST > 0     ; aCabs[nF2EST]     := PadR(cEstCli, TamSx3("F2_EST")[1]) ; EndIf
+							If nF2FRETE > 0    ; aCabs[nF2FRETE]    := nValFrete ; EndIf
+								If nF2TIPO > 0    ; aCabs[nF2TIPO]    := cTipoOper ; EndIf
+									If nF2COND > 0    ; aCabs[nF2COND]    := cCond ; EndIf
+										If nF2ESPECIE > 0 ; aCabs[nF2ESPECIE] := PadR(cEspecie, TamSx3("F2_ESPECIE")[1]) ; EndIf
+											If nF2EST > 0     ; aCabs[nF2EST]     := PadR(cEstCli, TamSx3("F2_EST")[1]) ; EndIf
 
-											For nI := 1 To Len(aPrd)
-												Aadd(aItens, Array(Len(aStruSD2)))
-												nPos := Len(aItens)
+												For nI := 1 To Len(aPrd)
+													Aadd(aItens, Array(Len(aStruSD2)))
+													nPos := Len(aItens)
 
-												For nX := 1 To Len(aStruSD2)
-													If aStruSD2[nX][2] $ "C/M"
-														aItens[nPos, nX] := ""
-													ElseIf aStruSD2[nX][2] == "D"
-														aItens[nPos, nX] := CToD("")
-													ElseIf aStruSD2[nX][2] == "N"
-														aItens[nPos, nX] := 0
-													ElseIf aStruSD2[nX][2] == "L"
-														aItens[nPos, nX] := .F.
+													For nX := 1 To Len(aStruSD2)
+														If aStruSD2[nX][2] $ "C/M"
+															aItens[nPos, nX] := ""
+														ElseIf aStruSD2[nX][2] == "D"
+															aItens[nPos, nX] := CToD("")
+														ElseIf aStruSD2[nX][2] == "N"
+															aItens[nPos, nX] := 0
+														ElseIf aStruSD2[nX][2] == "L"
+															aItens[nPos, nX] := .F.
+														EndIf
+													Next nX
+
+													cCustItm := U_FZ_STR_X(aPrd[nI], 'cod_CentroCusto')
+													If Empty(cCustItm)
+														cCustItm := U_FZ_CC_X(aPrd[nI]['cod_Produto'])
 													EndIf
-												Next nX
 
-												cCustItm := U_FZ_STR_X(aPrd[nI], 'cod_CentroCusto')
-												If Empty(cCustItm)
-													cCustItm := U_FZ_CC_X(aPrd[nI]['cod_Produto'])
-												EndIf
+													cUmDB := Posicione("SB1", 1, xFilial("SB1") + PadR(aPrd[nI]['cod_Produto'], TamSx3("B1_COD")[1]), "B1_UM")
+													cLocDB := Posicione("SB1", 1, xFilial("SB1") + PadR(aPrd[nI]['cod_Produto'], TamSx3("B1_COD")[1]), "B1_LOCPAD")
+													If Empty(cUmDB) ; cUmDB := "UN" ; EndIf
+														If Empty(cLocDB) ; cLocDB := "01" ; EndIf
 
-												cUmDB := Posicione("SB1", 1, xFilial("SB1") + PadR(aPrd[nI]['cod_Produto'], TamSx3("B1_COD")[1]), "B1_UM")
-												cLocDB := Posicione("SB1", 1, xFilial("SB1") + PadR(aPrd[nI]['cod_Produto'], TamSx3("B1_COD")[1]), "B1_LOCPAD")
-												If Empty(cUmDB) ; cUmDB := "UN" ; EndIf
-													If Empty(cLocDB) ; cLocDB := "01" ; EndIf
+															nQtdCalc   := Max(U_FZ_VAL_X(aPrd[nI], 'qtd_Produto'), 1)
+															nPrcCalc   := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario')
+															nDescUnit  := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario')
+															nDescTotal := Round(nQtdCalc * nDescUnit, 2)
+															nFreteItem := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoFrete')
 
-														nQtdCalc   := Max(U_FZ_VAL_X(aPrd[nI], 'qtd_Produto'), 1)
-														nPrcCalc   := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario')
-														nDescUnit  := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario')
-														nDescTotal := Round(nQtdCalc * nDescUnit, 2)
+															cNotaOri := PadL(ALLTRIM(U_FZ_STR_X(aPrd[nI], 'num_NFOrigem')), 9, '0')
+															cSerieOri := U_FZ_STR_X(aPrd[nI], 'cod_SerieOrigem')
+															cItemOri := U_FZ_STR_X(aPrd[nI], 'num_ProdutoSequencialOrigem')
+															cChaveOri := U_FZ_STR_X(aPrd[nI], 'cod_ChaveNFeOrigem')
 
-														cNotaOri := PadL(ALLTRIM(U_FZ_STR_X(aPrd[nI], 'num_NFOrigem')), 9, '0')
-														cSerieOri := U_FZ_STR_X(aPrd[nI], 'cod_SerieOrigem')
-														cItemOri := U_FZ_STR_X(aPrd[nI], 'num_ProdutoSequencialOrigem')
-														cChaveOri := U_FZ_STR_X(aPrd[nI], 'cod_ChaveNFeOrigem')
+															If nD2FILIAL > 0  ; aItens[nPos, nD2FILIAL] := xFilial("SD2") ; EndIf
+																If nD2DOC > 0     ; aItens[nPos, nD2DOC]    := cDocPad ; EndIf
+																	If nD2SERIE > 0   ; aItens[nPos, nD2SERIE]  := cSerPad ; EndIf
+																		If nD2CLIENTE > 0 ; aItens[nPos, nD2CLIENTE]:= cCli ; EndIf
+																			If nD2LOJA > 0    ; aItens[nPos, nD2LOJA]   := cLoja ; EndIf
+																				If nD2TIPO > 0    ; aItens[nPos, nD2TIPO]   := cTipoOper ; EndIf
+																					If nD2ITEM > 0    ; aItens[nPos, nD2ITEM]   := PadL(cValToChar(nI), TamSx3("D2_ITEM")[1], "0") ; EndIf
+																						If nD2COD > 0     ; aItens[nPos, nD2COD]    := PadR(aPrd[nI]['cod_Produto'], TamSx3("D2_COD")[1]) ; EndIf
 
-														If nD2FILIAL > 0  ; aItens[nPos, nD2FILIAL] := xFilial("SD2") ; EndIf
-															If nD2DOC > 0     ; aItens[nPos, nD2DOC]    := cDocPad ; EndIf
-																If nD2SERIE > 0   ; aItens[nPos, nD2SERIE]  := cSerPad ; EndIf
-																	If nD2CLIENTE > 0 ; aItens[nPos, nD2CLIENTE]:= cCli ; EndIf
-																		If nD2LOJA > 0    ; aItens[nPos, nD2LOJA]   := cLoja ; EndIf
-																			If nD2TIPO > 0    ; aItens[nPos, nD2TIPO]   := cTipoOper ; EndIf
-																				If nD2ITEM > 0    ; aItens[nPos, nD2ITEM]   := PadL(cValToChar(nI), TamSx3("D2_ITEM")[1], "0") ; EndIf
-																					If nD2COD > 0     ; aItens[nPos, nD2COD]    := PadR(aPrd[nI]['cod_Produto'], TamSx3("D2_COD")[1]) ; EndIf
+																							IF !Empty(cNotaOri) .AND. cTipoOper == 'D'
+																								IF lDevol
+																									lDevol := FZ_VALID_DEV(cChaveOri,cNotaOri,'C')
+																								Endif
+																								If nD2NFORI > 0   ; aItens[nPos, nD2NFORI]  := cNotaOri  ; EndIf
+																									If nD2SERORI > 0  ; aItens[nPos, nD2SERORI] := PADR(ALLTRIM(cSerieOri), nTamSerie, '') ; EndIf
+																										If nD2ITORI > 0   ; aItens[nPos, nD2ITORI]  := PadL(ALLTRIM(cItemOri), nTamItemOri, '0')  ; EndIf
+																										ENDIF
 
-																						IF !Empty(cNotaOri) .AND. cTipoOper == 'D'
-																							IF lDevol
-																								lDevol := FZ_VALID_DEV(cChaveOri,cNotaOri,'C')
-																							Endif
-																							If nD2NFORI > 0   ; aItens[nPos, nD2NFORI]  := cNotaOri  ; EndIf
-																								If nD2SERORI > 0  ; aItens[nPos, nD2SERORI] := PADR(ALLTRIM(cSerieOri), nTamSerie, '') ; EndIf
-																									If nD2ITORI > 0   ; aItens[nPos, nD2ITORI]  := PadL(ALLTRIM(cItemOri), nTamItemOri, '0')  ; EndIf
-																									ENDIF
+																										If nD2QUANT > 0   ; aItens[nPos, nD2QUANT]  := nQtdCalc ; EndIf
+																											If nD2PRCVEN > 0  ; aItens[nPos, nD2PRCVEN] := nPrcCalc ; EndIf
+																												If nD2FRETE > 0  ; aItens[nPos, nD2FRETE] := nFreteItem ; EndIf
+																													If nD2TOTAL > 0   ; aItens[nPos, nD2TOTAL]  := Round(nQtdCalc * nPrcCalc, 2) ; EndIf
+																														If nD2DESCON > 0 .And. nDescTotal > 0 ; aItens[nPos, nD2DESCON] := nDescTotal ; EndIf
 
-																									If nD2QUANT > 0   ; aItens[nPos, nD2QUANT]  := nQtdCalc ; EndIf
-																										If nD2PRCVEN > 0  ; aItens[nPos, nD2PRCVEN] := nPrcCalc ; EndIf
-																											If nD2TOTAL > 0   ; aItens[nPos, nD2TOTAL]  := Round(nQtdCalc * nPrcCalc, 2) ; EndIf
-																												If nD2DESCON > 0 .And. nDescTotal > 0 ; aItens[nPos, nD2DESCON] := nDescTotal ; EndIf
+																															If nD2TES > 0     ; aItens[nPos, nD2TES]    := PadR(aPrd[nI]['_TES_CACHE'], TamSx3("D2_TES")[1]) ; EndIf
+																																If nD2CF > 0      ; aItens[nPos, nD2CF]     := PadR(aPrd[nI]['cod_ProdutoCFOP'], TamSx3("D2_CF")[1]) ; EndIf
+																																	If nD2CC > 0      ; aItens[nPos, nD2CC]     := PadR(cCustItm, TamSx3("D2_CCUSTO")[1]) ; EndIf
+																																		If nD2UM > 0      ; aItens[nPos, nD2UM]     := PadR(cUmDB, TamSx3("D2_UM")[1]) ; EndIf
+																																			If nD2LOCAL > 0   ; aItens[nPos, nD2LOCAL]  := PadR(cLocDB, TamSx3("D2_LOCAL")[1]) ; EndIf
 
-																													If nD2TES > 0     ; aItens[nPos, nD2TES]    := PadR(aPrd[nI]['_TES_CACHE'], TamSx3("D2_TES")[1]) ; EndIf
-																														If nD2CF > 0      ; aItens[nPos, nD2CF]     := PadR(aPrd[nI]['cod_ProdutoCFOP'], TamSx3("D2_CF")[1]) ; EndIf
-																															If nD2CC > 0      ; aItens[nPos, nD2CC]     := PadR(cCustItm, TamSx3("D2_CCUSTO")[1]) ; EndIf
-																																If nD2UM > 0      ; aItens[nPos, nD2UM]     := PadR(cUmDB, TamSx3("D2_UM")[1]) ; EndIf
-																																	If nD2LOCAL > 0   ; aItens[nPos, nD2LOCAL]  := PadR(cLocDB, TamSx3("D2_LOCAL")[1]) ; EndIf
-
-																																		AADD(aDocOri,0)
-																																	Next nI
-																																	If cTipoOper == 'D'
-																																		If lDevol
-																																			cNfGerada := MaNfs2Nfs("", "", cCli, cLoja, cSerPad, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, aDocOri, aItens, aCabs, .T., bFiscalSF2, bFiscalSD2, NIL, cDocPad)
-																																		Else
-																																			aRet := {.F., "(MaNfs2Nfs) Nota de origem não existe na SF1. Favor verificar.",.T.}
-																																		Endif
-																																	ELSE
-																																		cNfGerada := MaNfs2Nfs("", "", "", "", cSerPad, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, aDocOri, aItens, aCabs, .T., bFiscalSF2, bFiscalSD2, NIL, cDocPad)
-																																	ENDIF
-																																	If !Empty(cNfGerada)
-																																		JSON_VENDA(cNfGerada, cSerPad, cCli, cLoja, aPrd, oHead, cTab)
-																																		FZ_GER_E1(cNfGerada, cSerPad, cCli, cLoja, aPrd, oHead, cTab,SE1->(RECNO()))
-																																		aRet := {.T., cNfGerada}
-																																	Else
-																																		If cTipoOper <> 'D'
-																																			aRet := {.F., "Erro MaNfs2Nfs",.F.}
-																																		Endif
-																																	EndIf
-																																	Return aRet
+																																				AADD(aDocOri,0)
+																																			Next nI
+																																			If cTipoOper == 'D'
+																																				If lDevol
+																																					cNfGerada := MaNfs2Nfs("", "", cCli, cLoja, cSerPad, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, aDocOri, aItens, aCabs, .T., bFiscalSF2, bFiscalSD2, NIL, cDocPad)
+																																				Else
+																																					aRet := {.F., "(MaNfs2Nfs) Nota de origem não existe na SF1. Favor verificar.",.T.}
+																																				Endif
+																																			ELSE
+																																				cNfGerada := MaNfs2Nfs("", "", "", "", cSerPad, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, aDocOri, aItens, aCabs, .T., bFiscalSF2, bFiscalSD2, NIL, cDocPad)
+																																			ENDIF
+																																			If !Empty(cNfGerada)
+																																				JSON_VENDA(cNfGerada, cSerPad, cCli, cLoja, aPrd, oHead, cTab)
+																																				FZ_GER_E1(cNfGerada, cSerPad, cCli, cLoja, aPrd, oHead, cTab,SE1->(RECNO()))
+																																				aRet := {.T., cNfGerada}
+																																			Else
+																																				If cTipoOper <> 'D'
+																																					aRet := {.F., "Erro MaNfs2Nfs",.F.}
+																																				Endif
+																																			EndIf
+																																			Return aRet
 
 Static Function RetOpera(cOper,cCST)
 
@@ -2945,6 +3215,7 @@ Static Function FZ_GER_E2(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab, nRecno)
 			SE2->E2_FORNECE := cForn
 			SE2->E2_LOJA    := cLoja
 			SE2->E2_EMISSAO := SF1->F1_EMISSAO
+			SE2->E2_EMIS1   := SF1->F1_DTDIGIT
 			SE2->E2_VENCTO  := dVencP
 			SE2->E2_VENCREA := dVencP
 			SE2->E2_VALOR   := nVlrP
@@ -2982,8 +3253,10 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 	Local cAutorizF
 	Local nX
 	Local cHist
-	Local cParce := 'A'
+	Local cParce := '01'
 	Local cTipoTit
+	Local cXTipo
+	Local cFluxo
 
 	DbSelectArea("SE1")
 	SE1->(DbGoTo(nRecno))
@@ -2994,6 +3267,7 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 		cCusto   := oHead['itens'][1]['cod_CentroCusto']
 		cEvento  := SE1->E1_XEVENTO
 		cHist    := SE1->E1_HIST
+		cXTipo   := oHead['des_TipoNF']
 
 		If oHead:HasProperty('recebimentos')
 			xParcVal := oHead['recebimentos']
@@ -3013,8 +3287,8 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				cTransac    := U_FZ_STR_X(oParcItem, "num_Transacao")
 				cAutorizF   := U_FZ_STR_X(oParcItem, "des_Autorizacao")
 				cTipoTit    := U_FZ_STR_X(oParcItem, "des_FormaPag")
-
 				cFormaRec := Upper(AllTrim(cFormaRec))
+				cFluxo      := U_FZ_STR_X(oParcItem, "flg_FluxoCaixa")
 
 				If "CARTAO" $ cFormaRec .Or. "CARTÃO" $ cFormaRec .Or. "CREDITO" $ cFormaRec .Or. "DEBITO" $ cFormaRec
 					cFormaTrat := "CC "
@@ -3057,8 +3331,8 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_SALDO   := nVlrP
 				SE1->E1_VLCRUZ  := nVlrP
 				SE1->E1_CCUSTO  := cCusto
-				SE1->E1_ORIGEM  := 'MATA460'
-				SE1->E1_FLUXO   := 'S'
+				//SE1->E1_ORIGEM  := 'MATA460'
+				SE1->E1_FLUXO   := cFluxo
 				SE1->E1_HIST    := cHist
 				SE1->E1_STATUS  := 'A'
 				SE1->E1_SERIE   := cSer
@@ -3066,7 +3340,11 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_SITUACA := '0'
 				SE1->E1_CARTAUT := cAutorizF
 				SE1->E1_NSUTEF  := cTransac
-				SE1->E1_FORMAPG := cFormaTrat
+				If AllTrim(cTipoTit) == 'CC' .OR. AllTrim(cTipoTit) == 'CD'
+					SE1->E1_FORMAPG := cTipoTit
+				else
+					SE1->E1_FORMAPG := cFormaTrat
+				Endif
 				SE1->E1_XEVENTO := cEvento
 				SE1->(MsUnlock())
 				cParce := SOMA1(cParce)

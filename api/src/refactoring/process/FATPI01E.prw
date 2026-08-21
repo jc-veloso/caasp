@@ -347,15 +347,20 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 			dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_ParcelaVencimento'))
 			nVlrP := U_PI_VAL_X(oParcItem, 'vlr_Parcela')
 
+			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - se vier
+			// vazio/zero, sempre 1 (nao a posicao no loop).
 			If Empty(cNumP) .Or. cNumP == "0"
-				cNumP := cValToChar(nX)
+				cNumP := "1"
 			EndIf
 
 			If Empty(dVencP)
 				dVencP := dEmissao
 			EndIf
 
-			AAdd(aParcLegacy, {cNumP, dVencP, nVlrP})
+			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - zero a
+			// esquerda aplicado aqui na origem, ja que o consumo mais
+			// abaixo (UPDATE SE2 via PadR) so preenche espaco, nao zero.
+			AAdd(aParcLegacy, {PadL(cNumP, TamSx3("E2_PARCELA")[1], "0"), dVencP, nVlrP})
 		Next nX
 	EndIf
 
@@ -898,15 +903,20 @@ User Function PI_GER_E2(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab, nRecno)
 			dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_ParcelaVencimento'))
 			nVlrP := U_PI_VAL_X(oParcItem, 'vlr_Parcela')
 
+			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - se vier
+			// vazio/zero, sempre 1 (nao a posicao no loop).
 			If Empty(cNumP) .Or. cNumP == "0"
-				cNumP := cValToChar(nX)
+				cNumP := "1"
 			EndIf
 
 			RecLock("SE2", .T.)
 			SE2->E2_FILIAL  := xFilial("SE2")
 			SE2->E2_PREFIXO := cSer
 			SE2->E2_NUM     := cDoc
-			SE2->E2_PARCELA := cNumP
+			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - campo
+			// alfanumerico com zero a esquerda (confirmado 08/2026 - "1"
+			// deve virar "01"), mesmo padrao aplicado do lado de SE1.
+			SE2->E2_PARCELA := PadL(cNumP, TamSx3("E2_PARCELA")[1], "0")
 			SE2->E2_TIPO    := 'NF'
 			SE2->E2_NATUREZ := cNaturez
 			SE2->E2_FORNECE := cForn

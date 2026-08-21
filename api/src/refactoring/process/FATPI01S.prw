@@ -583,7 +583,9 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 	While (cAliSE1)->(!Eof())
 		cParcela := (cAliSE1)->E1_PARCELA
 		If Empty(AllTrim(cParcela))
-			cParcela := "1"
+			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - zero a
+			// esquerda, mesmo padrao do FZ_GER_E1.
+			cParcela := PadL("1", TamSx3("E1_PARCELA")[1], "0")
 		EndIf
 
 		cQrySE1 := "UPDATE " + RetSqlName("SE1") + " SET "
@@ -1131,7 +1133,6 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 	Local cAutorizF
 	Local nX
 	Local cHist
-	Local cParce := 'A'
 	Local cTipoTit
 
 	DbSelectArea("SE1")
@@ -1180,8 +1181,10 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_Vencimento'))
 				nVlrP := U_PI_VAL_X(oParcItem, 'vlr_Recebimento')
 
+				// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - se vier
+				// vazio/zero, sempre 1 (nao a posicao no loop).
 				If Empty(cNumP) .Or. cNumP == "0"
-					cNumP := cValToChar(nX)
+					cNumP := "1"
 				EndIf
 
 				RecLock("SE1", .T.)
@@ -1190,7 +1193,15 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_MSFIL   := xFilial("SE1")
 				SE1->E1_PREFIXO := cSer
 				SE1->E1_NUM     := cDoc
-				SE1->E1_PARCELA := cParce
+				// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026
+				// Gravava cParce (contador alfabetico A/B/C via SOMA1) em vez
+				// de cNumP (ja calculado corretamente logo acima a partir de
+				// num_Parcela do JSON, com fallback sequencial 1/2/3 se vier
+				// vazio/zero) - cNumP ficava computado e nunca usado. Mesmo
+				// padrao que FZ_GER_E2 (FATPI01E.prw) ja usa do lado de
+				// compras (E2_PARCELA := cNumP). Campo alfanumerico com zero
+				// a esquerda (confirmado 08/2026 - "1" deve virar "01").
+				SE1->E1_PARCELA := PadL(cNumP, TamSx3("E1_PARCELA")[1], "0")
 				SE1->E1_TIPO    := IIF(!Empty(cTipoTit),cTipoTit,'NF')
 				SE1->E1_XTIPO   := 'NF'
 				SE1->E1_NATUREZ := cNaturez
@@ -1231,7 +1242,6 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_FORMAPG := cFormaTrat
 				SE1->E1_XEVENTO := cEvento
 				SE1->(MsUnlock())
-				cParce := SOMA1(cParce)
 			Next nX
 		EndIf
 	Endif

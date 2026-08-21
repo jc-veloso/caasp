@@ -199,7 +199,7 @@ Return aRet
 // ==========================================================================
 // COMPRAS (CLASSIFICACAO DA NOTA) - MOTOR MATA103
 // ==========================================================================
-User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, nAval, cCond)
+User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, nAval, cCond, lIsTransf)
 	Local aRet       := {.F.,""}
 	Local aCab       := {}
 	Local aIt        := {}
@@ -209,6 +209,7 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	Local nQtd       := 0
 	Local nPrc       := 0
 	Local nDescItm   := 0
+	Local nDespesa   := 0
 	Local cProdKey   := ""
 	Local cCta       := ""
 	Local cCC        := ""
@@ -228,6 +229,11 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	Local aParcLegacy:= {}
 
 	Local nVlrFrete  := U_PI_VAL_X(oHead, 'vlr_Frete')
+	// [FIX-FRETE-ENTRADA] Jose Carlos - Artiq - 08/2026 - F1_FRETE/
+	// D1_VALFRE restaurados, sumiram na extracao pro PI_GERANF_X atual -
+	// ver instrucoes_pendentes_pos_debug_transf.md, Parte B.2.
+	Local nValFrete  := Round(U_PI_VAL_X(oHead, 'vlr_Frete'), 4)
+	Local nValFreteUnit := 0
 	Local nVlrSeg    := U_PI_VAL_X(oHead, 'vlr_Seguro')
 	Local nVlrDesc   := U_PI_VAL_X(oHead, 'vlr_Desconto')
 	Local nVlrOutr   := U_PI_VAL_X(oHead, 'vlr_Outros')
@@ -259,13 +265,34 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	Local cNatJson   := U_PI_STR_X(oHead, "cod_NaturezaFinanceira")
 	Local cTransacao := U_PI_STR_X(oHead, "num_Transacao")
 
-	cCnpjU  := U_PI_LIMPA_X(U_PI_STR_X(oHead, "num_SubseccaoCNPJ", "num_SubseccaoCNPJ"))
+	// [FIX-TRANSF-CNPJ] Jose Carlos - Artiq - 08/2026 - lIsTransf novo
+	// parametro (default .F. se nao vier) - em CONVENIOS (transferencia),
+	// o ambiente de destino precisa ser resolvido por des_DestDocumento,
+	// nao por num_SubseccaoCNPJ (que e sempre a origem, nunca muda dentro
+	// do mesmo oHead). Ver instrucoes_pendentes_pos_debug_transf.md, A.2.
+	Default lIsTransf := .F.
+
+	If lIsTransf
+		cCnpjU := U_PI_LIMPA_X(U_PI_STR_X(oHead, "des_DestDocumento", "des_DestDocumento"))
+	Else
+		cCnpjU := U_PI_LIMPA_X(U_PI_STR_X(oHead, "num_SubseccaoCNPJ", "num_SubseccaoCNPJ"))
+	EndIf
 	aEmpFil := U_FATPIEMP(cCnpjU)
+
+	// [TEMP-DEBUG-TRANSF] Jose Carlos - Artiq - 08/2026 - instrumentacao
+	// temporaria pra investigar bug de transferencia reportado pelo Wilson
+	// - ver instrucao_despesa_frete_debug_transferencia.md, Parte 3. NAO
+	// aplicar correcao ainda, so instrumentar e analisar o log. Remover
+	// depois de decidido.
+	ConOut("[DEBUG-TRANSF] PI_GERANF_X entrada | cCnpjU=" + cCnpjU + " | aEmpFil=" + IIF(Len(aEmpFil)>=2, aEmpFil[1]+"/"+aEmpFil[2], "VAZIO") + " | ambiente atual=" + cEmpAnt + "/" + cFilAnt)
 
 	if Len(aEmpFil) > 0
 		If aEmpFil[1] != cEmpAnt .Or. aEmpFil[2] != cFilAnt
+			ConOut("[DEBUG-TRANSF] PI_GERANF_X VAI TROCAR ambiente de " + cEmpAnt + "/" + cFilAnt + " para " + aEmpFil[1] + "/" + aEmpFil[2])
 			RPCClearEnv()
 			RpcSetEnv(aEmpFil[1], aEmpFil[2])
+		Else
+			ConOut("[DEBUG-TRANSF] PI_GERANF_X NAO trocou - ambiente ja bate")
 		EndIf
 	Endif
 
@@ -364,6 +391,7 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	AAdd(aCab, {"F1_VALMERC", nVlrMercV, Nil})
 	AAdd(aCab, {"F1_DESCONT", nVlrDesc, Nil}) // <--- CORREÇÃO: Injetando o desconto global no cabeçalho
 	AAdd(aCab, {"F1_EST", cUFEntity, Nil})
+	AAdd(aCab, {"F1_FRETE", nValFrete, Nil}) // [FIX-FRETE-ENTRADA] restaurado
 	AAdd(aCab, {"E2_NATUREZ", PADR(ALLTRIM(cNatReal),nTamNat,''), Nil})
 
 	For nI := 1 To Len(aPrd)
@@ -374,6 +402,11 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 
 			nPrc := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario'), 4)
 			nDescItm := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd // <--- CORREÇÃO: Extraindo o desconto do item
+			// [FIX-DESPESA] Jose Carlos - Artiq - 08/2026 - restaura campo
+			// que existia no original (FZ_PRON_X) e sumiu na extracao pra
+			// PI_GERANF_X - ver instrucao_despesa_frete_debug_transferencia.md.
+			nDespesa := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoOutros')
+			nValFreteUnit := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoFrete'), 4) // [FIX-FRETE-ENTRADA] restaurado
 
 			cProdKey := AllTrim(PadR(cValToChar(AllTrim(aPrd[nI]['cod_Produto'])), 30))
 			cItemSeq := PadL(cValToChar(nI), TamSx3("D1_ITEM")[1], "0")
@@ -400,6 +433,8 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 			AAdd(aLin, {"D1_VUNIT", nPrc, Nil})
 			AAdd(aLin, {"D1_TOTAL", Round(nQtd * nPrc, 2), Nil})
 			AAdd(aLin, {"D1_VALDESC", nDescItm, Nil}) // <--- CORREÇÃO: Injetando o desconto do item para o MATA103
+			AAdd(aLin, {"D1_DESPESA", nDespesa, Nil}) // [FIX-DESPESA] restaurado, ver instrucao_despesa_frete_debug_transferencia.md
+			AAdd(aLin, {"D1_VALFRE", nValFreteUnit, Nil}) // [FIX-FRETE-ENTRADA] restaurado
 			AAdd(aLin, {"D1_TES", cTE, Nil})
 			AAdd(aLin, {"D1_CONTA", cCta, Nil})
 			AAdd(aLin, {"D1_CC", cCC, Nil})

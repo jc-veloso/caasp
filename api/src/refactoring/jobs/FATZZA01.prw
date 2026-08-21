@@ -203,7 +203,12 @@ Static Function ZZA_MotorSaida(jJson)
         If lIsTransf .And. cCnpjEmit != cCnpjDest
             aEmpDest := U_PI_FILIAL_X(cCnpjDest)
             If Len(aEmpDest) >= 2
-                aRetTransf := U_FATPI01NF(aPrd, oHead, cCnpjEmit, cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), aEmpDest)
+                // [FIX-TRANSF-CNPJ] Jose Carlos - Artiq - 08/2026 - lIsTransf
+                // repassado ate U_PI_GERANF_X, pra resolver o ambiente de
+                // destino por des_DestDocumento em vez de num_SubseccaoCNPJ
+                // (que e sempre a origem). Ver
+                // instrucoes_pendentes_pos_debug_transf.md, A.2.
+                aRetTransf := U_FATPI01NF(aPrd, oHead, cCnpjEmit, cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), aEmpDest, lIsTransf)
                 If !aRetTransf[1]
                     U_PI_ROLLBACK_NF(cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')))
                     // [FIX-CALLBACK-ERRO] Jose Carlos - Artiq - 08/2026

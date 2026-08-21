@@ -45,6 +45,7 @@ User Function FATZZ901()
     Local cSub       := ""
     Local cTabPai    := ""
     Local cTipoPen   := ""
+    Local cProdPend  := ""
     Local lOk        := .F.
     Local lDup       := .F.
     Local nOk        := 0
@@ -96,6 +97,7 @@ User Function FATZZ901()
         cSub    := ""
         cTabPai := ""
         cTipoPen:= ""
+        cProdPend := ""
         lOk     := .F.
         lDup    := .F.
 
@@ -122,10 +124,13 @@ User Function FATZZ901()
             Else
                 cErrMsg  := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "Erro desconhecido na classificacao")
                 cSub     := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
-                // [FIX-CLIFOR-PENDENTE] 4o elemento "CLI"/"FOR" (quando
-                // presente) distingue "estacionada" de erro real - ver
-                // contrato no cabecalho de ZZ901_Classifica.
-                cTipoPen := IIF(Len(aRet) >= 4 .And. (aRet[4] == "CLI" .Or. aRet[4] == "FOR"), aRet[4], "")
+                // [FIX-CLIFOR-PENDENTE]/[FIX-PROD-PENDENTE-CLASSIF] 4o
+                // elemento "CLI"/"FOR"/"PRD" (quando presente) distingue
+                // "estacionada" de erro real - ver contrato no cabecalho
+                // de ZZ901_Classifica. "PRD" ganha um 5o elemento com o
+                // codigo legado do produto faltante.
+                cTipoPen  := IIF(Len(aRet) >= 4 .And. (aRet[4] == "CLI" .Or. aRet[4] == "FOR" .Or. aRet[4] == "PRD"), aRet[4], "")
+                cProdPend := IIF(cTipoPen == "PRD" .And. Len(aRet) >= 5, cValToChar(aRet[5]), "")
             EndIf
         Else
             cErrMsg := "JSON invalido na fila ZZ9. COD: " + cCod
@@ -146,6 +151,22 @@ User Function FATZZ901()
             EndIf
             nOk++
             ConOut("[FATZZ901] OK: " + cCod + " | Destino: " + cTabPai + IIF(lDup, " (nota ja existia, nao duplicou)", ""))
+        ElseIf cTipoPen == "PRD"
+            // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
+            // Produto nao cadastrado NA HORA da classificacao - alinhado
+            // com o time iPaaS: em vez de falhar (STATUS='E'), estaciona a
+            // nota igual ao fluxo do FATPI10 - grava o produto faltante na
+            // ZZF (U_ZZF_GRV, mesma funcao que o endpoint usa; cJsonPayload
+            // vazio, ZZF_CADPRD busca o cadastro definitivo na API externa
+            // por codigo, nao precisa do JSON aqui) e marca ZZ9_PRDPEN='S'
+            // (cFilOri, mesmo motivo do [FIX-DESTMU-FILIAL]). Sem callback
+            // pro iPaaS - economia de mensagens, mesma decisao do
+            // [TEMP-CALLBACK-OFF] ja aplicado aos callbacks intermediarios.
+            U_UPDSTAT("ZZ9", cCod, "P", "")
+            U_ZZF_GRV(cChvNFe, "ZZ9", cProdPend, "")
+            TCSqlExec("UPDATE " + RetSqlName("ZZ9") + " SET ZZ9_PRDPEN = 'S' WHERE ZZ9_COD = '" + cCod + "' AND ZZ9_FILIAL = '" + cFilOri + "' AND D_E_L_E_T_ = ' '")
+            nPark++
+            ConOut("[FATZZ901] ESTACIONADA (produto pendente): " + cCod + " | Produto: " + cProdPend)
         ElseIf !Empty(cTipoPen)
             // [FIX-CLIFOR-PENDENTE] Jose Carlos - Artiq - 08/2026
             // Cliente/fornecedor nao encontrado NA HORA da classificacao -
@@ -206,8 +227,13 @@ Return
 //                  fornecedor pendente, ver [FIX-CLIFOR-PENDENTE]): array
 //                  de 4 elementos, 4o = "CLI" ou "FOR" - o loop principal
 //                  marca ZZ9_CLIPEN/ZZ9_FORPEN='S' e reseta STATUS pra 'P'
-//                  em vez de 'E', sem callback de erro. Falha real de
-//                  verdade: array de 3 elementos (sem 4o), como sempre.
+//                  em vez de 'E', sem callback de erro. "Estacionada" por
+//                  produto pendente (ver [FIX-PROD-PENDENTE-CLASSIF]):
+//                  array de 5 elementos, 4o = "PRD", 5o = codigo legado do
+//                  produto faltante - o loop principal grava na ZZF via
+//                  U_ZZF_GRV e marca ZZ9_PRDPEN='S', tambem sem callback.
+//                  Falha real de verdade: array de 3 elementos (sem 4o),
+//                  como sempre.
 // ==========================================================================
 Static Function ZZ901_Classifica(jJson)
     Local aInv         := jJson['notas']
@@ -333,8 +359,13 @@ Static Function ZZ901_Classifica(jJson)
                 cOper := "E"
                 cTab  := "SA2"
             ElseIf cCnpj == cCnpjEmit .And. cCnpj != cCnpjDest
+                // [FIX-TRANSF-CTAB] Jose Carlos - Artiq - 08/2026 - era
+                // "SA2", divergente do original (FZ_PROS_X) - origem =
+                // fornecedor (SA2, ja confirmado pela validacao logo
+                // abaixo), destino = cliente (SA1). Ver
+                // instrucoes_pendentes_pos_debug_transf.md, Parte A.1.
                 cOper := "S"
-                cTab  := "SA2"
+                cTab  := "SA1"
             Else
                 If Left(cAuxC, 1) $ "1/2"
                     cOper := "E"
@@ -446,7 +477,21 @@ Static Function ZZ901_Classifica(jJson)
         EndIf
 
         If Empty(cProdInt)
-            Return {.F., "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg, cSub}
+            // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
+            // Alinhado com o time iPaaS (08/2026): produto nao cadastrado
+            // NA HORA da classificacao (deteccao upfront do iPaaS via
+            // prod_Pendente falhou ou ficou desatualizada) nao e mais erro
+            // definitivo - estaciona a nota (5o elemento "PRD" + 6o
+            // elemento com o codigo legado do produto faltante). O loop
+            // principal (FATZZ901()) grava o produto na ZZF via
+            // U_ZZF_GRV e marca ZZ9_PRDPEN='S', mesmo mecanismo ja usado
+            // pelo fluxo do FATPI10. Sem callback pro iPaaS (economia de
+            // mensagens - decisao consciente, mesma linha dos callbacks
+            // intermediarios ja desativados, [TEMP-CALLBACK-OFF]).
+            // Descoberta incremental: para no primeiro produto faltante
+            // (nao escaneia o restante do item) - nota com varios produtos
+            // faltantes leva um ciclo de estacionar/resolver por produto.
+            Return {.F., "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg, cSub, "PRD", cProdLeg}
         EndIf
 
         U_PI_FIXPROD(cProdInt, aPrd[nI])

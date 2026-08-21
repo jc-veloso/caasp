@@ -65,15 +65,19 @@ User Function FATZZD01()
     Local cCod     := ""
     Local cJson    := ""
     Local cChvNFe  := ""
+    Local cFilOri  := ""
     Local cErrMsg  := ""
     Local cSub     := ""
     Local cFilCb   := ""
     Local cDocCb   := ""
     Local cMsgSuc  := ""
+    Local cTipoPen := ""
+    Local cProdPend:= ""
     Local nRecno   := 0
     Local lOk      := .F.
     Local nOk      := 0
     Local nErr     := 0
+    Local nPark    := 0
     Local jJson    := Nil
     Local aRet     := {}
     Local aFila    := {}
@@ -104,7 +108,7 @@ User Function FATZZD01()
     // aqui dentro do motor - CLIPEN so e setado de fora (FATPI11, via
     // cliente_Pendente na ingestao). ZZD_FORPEN na pratica fica sempre
     // 'N' (NFCe e sempre venda, fornecedor pendente nao se aplica).
-    cQry := "SELECT ZZD_COD, ZZD_CHVNFE, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZD") + " "
+    cQry := "SELECT ZZD_COD, ZZD_CHVNFE, ZZD_FILIAL, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZD") + " "
     cQry += "WHERE ZZD_STATUS IN ('P','A') AND ZZD_PRDPEN = 'N' AND ZZD_CLIPEN = 'N' AND ZZD_FORPEN = 'N' "
     cQry += "AND ZZD_FILIAL = '" + xFilial("ZZD") + "' "
     cQry += "AND D_E_L_E_T_ = ' ' "
@@ -124,7 +128,7 @@ User Function FATZZD01()
     // ANTES de processar qualquer nota - o cursor TOPCONN fecha logo
     // depois de ler a fila, entao nao sobrevive a nenhuma chamada ao motor.
     While (cAliZZD)->(!Eof())
-        aAdd(aFila, {AllTrim((cAliZZD)->ZZD_COD), AllTrim((cAliZZD)->ZZD_CHVNFE), (cAliZZD)->RECNO})
+        aAdd(aFila, {AllTrim((cAliZZD)->ZZD_COD), AllTrim((cAliZZD)->ZZD_CHVNFE), AllTrim((cAliZZD)->ZZD_FILIAL), (cAliZZD)->RECNO})
         (cAliZZD)->(DbSkip())
     EndDo
     (cAliZZD)->(DbCloseArea())
@@ -132,12 +136,15 @@ User Function FATZZD01()
     For nJ := 1 To Len(aFila)
         cCod    := aFila[nJ][1]
         cChvNFe := aFila[nJ][2]
-        nRecno  := aFila[nJ][3]
+        cFilOri := aFila[nJ][3]
+        nRecno  := aFila[nJ][4]
         cErrMsg := ""
         cSub    := ""
         cFilCb  := ""
         cDocCb  := ""
         cMsgSuc := ""
+        cTipoPen := ""
+        cProdPend := ""
         lOk     := .F.
 
         // Reposiciona na area nativa ZZD so pra ler o memo certo
@@ -166,6 +173,12 @@ User Function FATZZD01()
                 cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else
                 cErrMsg := cValToChar(aRet[2])
+                // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
+                // 4o elemento "PRD" (quando presente) + 5o elemento com o
+                // codigo legado do produto faltante - mesmo contrato de
+                // ZZ901_Classifica, ver [FIX-PROD-PENDENTE-CLASSIF] la.
+                cTipoPen  := IIF(Len(aRet) >= 4 .And. aRet[4] == "PRD", "PRD", "")
+                cProdPend := IIF(cTipoPen == "PRD" .And. Len(aRet) >= 5, cValToChar(aRet[5]), "")
             EndIf
         Else
             cErrMsg := "JSON invalido na fila ZZD. COD: " + cCod
@@ -179,6 +192,19 @@ User Function FATZZD01()
             ConOut("[TIMING][FATZZD01] Callback iPaaS: " + cValToChar(Seconds() - nTIni) + "s | " + cCod)
             nOk++
             ConOut("[FATZZD01] OK: " + cCod)
+        ElseIf cTipoPen == "PRD"
+            // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
+            // Mesmo tratamento do ZZ901_Classifica (NFe) - produto nao
+            // cadastrado na hora da classificacao estaciona a nota em vez
+            // de falhar: grava na ZZF (U_ZZF_GRV) e marca ZZD_PRDPEN='S'.
+            // cFilOri capturada na query principal (ZZD_MotorNFCe pode
+            // trocar de ambiente mid-function - mesmo motivo do
+            // [FIX-DESTMU-FILIAL] ja usado em ZZ9). Sem callback pro iPaaS.
+            U_UPDSTAT("ZZD", cCod, "P", "")
+            U_ZZF_GRV(cChvNFe, "NFC", cProdPend, "")
+            TCSqlExec("UPDATE " + RetSqlName("ZZD") + " SET ZZD_PRDPEN = 'S' WHERE ZZD_COD = '" + cCod + "' AND ZZD_FILIAL = '" + cFilOri + "' AND D_E_L_E_T_ = ' '")
+            nPark++
+            ConOut("[FATZZD01] ESTACIONADA (produto pendente): " + cCod + " | Produto: " + cProdPend)
         Else
             U_UPDSTAT("ZZD", cCod, "E", cErrMsg)
             nTIni := Seconds()
@@ -189,7 +215,7 @@ User Function FATZZD01()
         EndIf
     Next nJ
 
-    ConOut("[FATZZD01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
+    ConOut("[FATZZD01] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
     RpcClearEnv()
 Return
 
@@ -347,8 +373,14 @@ Static Function ZZD_MotorNFCe(jJson)
         EndIf
 
         If Empty(cProdInt)
-            // [DEFENSIVO] Endpoint ja garantiu existencia antes de gravar com PRDPEND='N'. Nao deveria cair aqui.
-            Return {.F., "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg, cSub}
+            // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
+            // Endpoint deveria ter garantido existencia via PRDPEND='N',
+            // mas a deteccao upfront do iPaaS pode falhar/ficar
+            // desatualizada (mesmo raciocinio do ZZ901_Classifica, ver
+            // [FIX-PROD-PENDENTE-CLASSIF] la) - alinhado com o time iPaaS:
+            // estaciona em vez de falhar (5o elemento "PRD" + 6o com o
+            // codigo legado do produto faltante).
+            Return {.F., "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg, cSub, "PRD", cProdLeg}
         EndIf
 
         U_PI_FIXPROD(cProdInt, aPrd[nI])

@@ -592,6 +592,17 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 		cQrySE1 += "E1_NATUREZ = '" + PadR(cNatItm, TamSx3("E1_NATUREZ")[1]) + "', "
 		cQrySE1 += "E1_CCUSTO = '" + PadR(cCCItm, TamSx3("E1_CCUSTO")[1]) + "', "
 		cQrySE1 += "E1_XEVENTO = '" + PadR(cOrigem, TamSx3("E1_XEVENTO")[1]) + "', "
+		// [FIX-SE1-CODFUNC] Jose Carlos - Artiq - 08/2026 - campo novo, sem
+		// precedente no original - ver instrucoes_pendentes_pos_debug_transf.md,
+		// C.1. Guarda Len(TamSx3(...)) por seguranca (ainda nao confirmado
+		// no dicionario).
+		If Len(TamSx3("E1_CODFUNC")) > 0
+			cQrySE1 += "E1_CODFUNC = '" + PadR(Posicione('SA1', 1, FWxFilial('SA1') + cCliPad + cLojaPad, 'A1_XCODRH'), TamSx3("E1_CODFUNC")[1]) + "', "
+		EndIf
+		// [FIX-SE1-MOEDA] Jose Carlos - Artiq - 08/2026 - mesmo valor fixo
+		// que E2_MOEDA ja usa do lado de compras - ver C.2. Campo padrao
+		// do Protheus, sem guarda.
+		cQrySE1 += "E1_MOEDA = 1, "
 
 		cQrySE1 += "E1_VALOR = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
 		cQrySE1 += "E1_SALDO = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
@@ -624,7 +635,7 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 // ==========================================================================
 // COMPRAS (ENTRADAS) - JSON_COMPRA - Tratamento Cirurgico Pos-Gravacao
 // ==========================================================================
-User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest)
+User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest, lIsTransf)
 	Local aRet       := {.F., ""}
 	Local cEmpAtu    := cEmpAnt
 	Local cFilAtu    := cFilAnt
@@ -705,7 +716,7 @@ User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest)
 
 		If lOkTes
 			// 4. Chama o motor de Entrada
-			aRet := U_PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, "", "SA2", aEmpDest[2], 0, cCondSafe)
+			aRet := U_PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, "", "SA2", aEmpDest[2], 0, cCondSafe, lIsTransf)
 		Else
 			aRet := {.F., cMsgTes}
 		EndIf
@@ -747,12 +758,28 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	Local cSerieOri
 	Local cItemOri
 	Local lDevol := .T.
+	// [FIX-TRANSF-CLIENTE] Jose Carlos - Artiq - 08/2026 - cCnpjCli usado
+	// no bloco lIsTransf abaixo pra resolver cliente/loja via SA1 -
+	// restaurado do original (FZ_PROS_X), nao existia aqui ainda. Ver
+	// instrucoes_pendentes_pos_debug_transf.md, A.3.
+	Local cCnpjCli   := U_PI_LIMPA_X(U_PI_STR_X(oHead, "des_DestDocumento", "des_DestDocumento"))
 
 	Local bFiscalSF2 := {|| .T.}
 	Local bFiscalSD2 := {|| .T.}
 
-	Local nF2FILIAL, nF2TIPO, nF2DOC, nF2SERIE, nF2EMISSAO, nF2CLIENTE, nF2LOJA, nF2COND, nF2ESPECIE, nF2EST
-	Local nD2FILIAL, nD2DOC, nD2SERIE, nD2CLIENTE, nD2LOJA, nD2TIPO, nD2COD, nD2QUANT, nD2PRCVEN, nD2TOTAL, nD2TES, nD2CF, nD2CC, nD2ITEM, nD2UM, nD2LOCAL, nD2DESCON
+	// [FIX-FRETE] Jose Carlos - Artiq - 08/2026 - nFreteVlr/nF2FRETE
+	// restaurados, sumiram na extracao pro PI_SAIDA_X atual - ver
+	// instrucao_despesa_frete_debug_transferencia.md. Leitura propria (nao
+	// reaproveita a variavel de JSON_VENDA - escopo de Static Function
+	// separado, e JSON_VENDA roda so depois, tratamento pos-gravacao).
+	Local nFreteVlr  := U_PI_VAL_X(oHead, 'vlr_Frete')
+	Local nF2FILIAL, nF2TIPO, nF2DOC, nF2SERIE, nF2EMISSAO, nF2CLIENTE, nF2LOJA, nF2COND, nF2ESPECIE, nF2EST, nF2FRETE
+	Local nD2FILIAL, nD2DOC, nD2SERIE, nD2CLIENTE, nD2LOJA, nD2TIPO, nD2COD, nD2QUANT, nD2PRCVEN, nD2TOTAL, nD2TES, nD2CF, nD2CC, nD2ITEM, nD2UM, nD2LOCAL, nD2DESCON, nD2FRETE
+	// [FIX-FRETE-SAIDA] Jose Carlos - Artiq - 08/2026 - D2_VALFRE (item)
+	// restaurado, sumiu na extracao pro PI_SAIDA_X atual - ver
+	// instrucoes_pendentes_pos_debug_transf.md, Parte B.2. Compartilhado
+	// por FATZZA01 (NFe) e FATZZD01 (NFCe).
+	Local nFreteItem := 0
 
 	Local nQtdCalc   := 0
 	Local nPrcCalc   := 0
@@ -784,6 +811,16 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	cTipoOper := IIF(Alltrim(cTab) == 'SA2', 'D','N')
 
 	If lIsTransf
+		// [FIX-TRANSF-CLIENTE] resolve cliente/loja de destino via SA1
+		// (des_DestDocumento) - sem isso, cCli/cLoja continuam com o valor
+		// do chamador (pode estar errado/vazio pra CONVENIOS). Restaurado
+		// do original, ver instrucoes_pendentes_pos_debug_transf.md, A.3.
+		DbSelectArea("SA1")
+		SA1->(DbSetOrder(3))
+		If SA1->(DbSeek(xFilial("SA1") + cCnpjCli))
+			cCli  := SA1->A1_COD
+			cLoja := SA1->A1_LOJA
+		EndIf
 		cTipoOper := 'N'
 	Endif
 
@@ -799,6 +836,7 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	nF2COND    := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_COND"})
 	nF2ESPECIE := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_ESPECIE"})
 	nF2EST     := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_EST"})
+	nF2FRETE   := Ascan(aStruSF2,{|x| AllTrim(x[1]) == "F2_FRETE"})
 
 	nD2FILIAL  := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_FILIAL"})
 	nD2DOC     := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_DOC"})
@@ -817,6 +855,7 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	nD2UM      := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_UM"})
 	nD2LOCAL   := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_LOCAL"})
 	nD2DESCON  := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_DESCON"})
+	nD2FRETE   := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_VALFRE"})
 	nD2NFORI   := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_NFORI"})
 	nD2SERORI  := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_SERIORI"})
 	nD2ITORI   := Ascan(aStruSD2,{|x| AllTrim(x[1]) == "D2_ITEMORI"})
@@ -863,6 +902,9 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	If nF2EST > 0
 		aCabs[nF2EST]     := PadR(cEstCli, TamSx3("F2_EST")[1])
 	EndIf
+	If nF2FRETE > 0
+		aCabs[nF2FRETE]   := nFreteVlr
+	EndIf
 
 	For nI := 1 To Len(aPrd)
 		Aadd(aItens, Array(Len(aStruSD2)))
@@ -898,6 +940,7 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 		nPrcCalc   := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario')
 		nDescUnit  := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario')
 		nDescTotal := Round(nQtdCalc * nDescUnit, 2)
+		nFreteItem := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoFrete') // [FIX-FRETE-SAIDA] restaurado
 
 		cNotaOri := PadL(ALLTRIM(U_PI_STR_X(aPrd[nI], 'num_NFOrigem')), 9, '0')
 		cSerieOri := U_PI_STR_X(aPrd[nI], 'cod_SerieOrigem')
@@ -957,6 +1000,9 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 		EndIf
 		If nD2PRCVEN > 0
 			aItens[nPos, nD2PRCVEN] := nPrcCalc
+		EndIf
+		If nD2FRETE > 0
+			aItens[nPos, nD2FRETE] := nFreteItem
 		EndIf
 		If nD2TOTAL > 0
 			aItens[nPos, nD2TOTAL]  := Round(nQtdCalc * nPrcCalc, 2)
@@ -1151,6 +1197,19 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_CLIENTE := cCli
 				SE1->E1_LOJA    := cLoja
 				SE1->E1_NOMCLI  := Posicione('SA1', 1, FWxFilial('SA1') + SE1->E1_CLIENTE + SE1->E1_LOJA, 'A1_NOME')
+				// [FIX-SE1-CODFUNC] Jose Carlos - Artiq - 08/2026 - campo
+				// novo, sem precedente no original, confirmado com o Jose
+				// Carlos - ver instrucoes_pendentes_pos_debug_transf.md,
+				// C.1. Guarda FieldPos por seguranca (ainda nao confirmado
+				// no dicionario).
+				If SE1->(FieldPos("E1_CODFUNC")) > 0
+					SE1->E1_CODFUNC := Posicione('SA1', 1, FWxFilial('SA1') + SE1->E1_CLIENTE + SE1->E1_LOJA, 'A1_XCODRH')
+				EndIf
+				// [FIX-SE1-MOEDA] Jose Carlos - Artiq - 08/2026 - mesmo
+				// valor fixo que E2_MOEDA ja usa do lado de compras
+				// (FZ_GER_E2) - ver C.2. Campo padrao do Protheus, sem
+				// guarda (mesmo padrao ja usado em E2_MOEDA).
+				SE1->E1_MOEDA   := 1
 				SE1->E1_EMISSAO := SF2->F2_EMISSAO
 				SE1->E1_EMIS1   := SF2->F2_EMISSAO
 				SE1->E1_VENCTO  := dVencP

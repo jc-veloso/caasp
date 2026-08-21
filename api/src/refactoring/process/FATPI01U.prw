@@ -396,6 +396,11 @@ User Function PI_CLI_X(oJson)
             oSA1Mod:SetValue("A1_PESSOA" , "J")
         EndIf
         oSA1Mod:SetValue("A1_LEGADO" , cVLeg)
+        // [FIX-CLI-RH] Jose Carlos - Artiq - 08/2026
+        // Campos novos pedidos pelo time - cod_RH/tpo_Funcionario do JSON
+        // pra A1_XCODRH/A1_TPOFUNC (SA1).
+        oSA1Mod:SetValue("A1_XCODRH" , U_PI_STR_X(oJson, "cod_RH"))
+        oSA1Mod:SetValue("A1_TPOFUNC", U_PI_STR_X(oJson, "tpo_Funcionario"))
 
         // [FIX-SYNC-PICLI] Jose Carlos - Artiq - 08/2026
         // A1_COD_MUN sem default de cod_Municipio era divergente do

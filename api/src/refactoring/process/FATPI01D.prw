@@ -356,7 +356,11 @@ If lDevol
         aRet := {.F., aEx[2], .F.}
     EndIf
 Else
-	aRet := {.F., "(MATA103) Nota de origem não existe na SF2. Favor verificar.",.T.}
+	// [FIX-ORA01465] Jose Carlos - Artiq - 08/2026
+	// "nao" sem acento - mesmo fix de FATPI01S.prw ("não" UTF-8 causava
+	// ORA-01465 no TCSqlExec de U_UPDSTAT ao gravar essa mensagem em
+	// ZZB_ERRMSG).
+	aRet := {.F., "(MATA103) Nota de origem nao existe na SF2. Favor verificar.",.T.}
 Endif
 Return aRet
 

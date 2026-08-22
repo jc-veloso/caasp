@@ -1035,7 +1035,13 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 		If lDevol
 			cNfGerada := MaNfs2Nfs("", "", cCli, cLoja, cSerPad, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, aDocOri, aItens, aCabs, .T., bFiscalSF2, bFiscalSD2, NIL, cDocPad)
 		Else
-			aRet := {.F., "(MaNfs2Nfs) Nota de origem não existe na SF1. Favor verificar.",.T.}
+			// [FIX-ORA01465] Jose Carlos - Artiq - 08/2026
+			// "nao" sem acento - "não" (UTF-8) nessa string hardcoded
+			// causava ORA-01465 (invalid hex number) no TCSqlExec de
+			// U_UPDSTAT quando essa mensagem ia pro ZZA_ERRMSG. Mesmo
+			// motivo pelo qual toda outra mensagem de erro do projeto
+			// (refactoring/) ja evita acento.
+			aRet := {.F., "(MaNfs2Nfs) Nota de origem nao existe na SF1. Favor verificar.",.T.}
 		Endif
 	ELSE
 		cNfGerada := MaNfs2Nfs("", "", "", "", cSerPad, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, aDocOri, aItens, aCabs, .T., bFiscalSF2, bFiscalSD2, NIL, cDocPad)

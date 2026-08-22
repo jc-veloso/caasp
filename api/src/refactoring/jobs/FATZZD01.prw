@@ -82,6 +82,8 @@ User Function FATZZD01()
     Local aRet     := {}
     Local aFila    := {}
     Local nJ       := 0
+    Local bErrOld  := Nil
+    Local oErrRT   := Nil
     // [TIMING] Jose Carlos - Artiq - 08/2026 - instrumentacao temporaria
     // pra medir onde o tempo de processamento vai (~8s/nota observados em
     // teste real) - tirar depois de ter os numeros, nao e pra ficar no
@@ -158,7 +160,17 @@ User Function FATZZD01()
         jJson := JsonObject():New()
         If Empty(jJson:FromJson(cJson))
             nTIni := Seconds()
-            aRet  := ZZD_MotorNFCe(jJson)
+            // [FIX-EXCEPTION-MOTOR] 08/2026 - Begin
+            // Sequence/Recover em volta do motor - excecao de runtime nao
+            // tratada vira erro normal em vez de derrubar o Job inteiro
+            // sem callback. Ver U_PI_ERRO_RT (FATZZF01.prw).
+            bErrOld := ErrorBlock({|oErr| Break(oErr)})
+            Begin Sequence
+                aRet := ZZD_MotorNFCe(jJson)
+            Recover Using oErrRT
+                aRet := {.F., "EXCEPTION: " + U_PI_ERRO_RT(oErrRT), ""}
+            End Sequence
+            ErrorBlock(bErrOld)
             ConOut("[TIMING][FATZZD01] ZZD_MotorNFCe: " + cValToChar(Seconds() - nTIni) + "s | " + cCod)
             lOk  := aRet[1]
             cSub := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")

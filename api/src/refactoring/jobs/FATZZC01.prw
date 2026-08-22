@@ -44,6 +44,8 @@ User Function FATZZC01()
     Local aRet     := {}
     Local aFila    := {}
     Local nJ       := 0
+    Local bErrOld  := Nil
+    Local oErrRT   := Nil
 
     Private __cBatch := "1"
 
@@ -96,7 +98,17 @@ User Function FATZZC01()
 
         jJson := JsonObject():New()
         If Empty(jJson:FromJson(cJson))
-            aRet := ZZC_MotorEntrada(jJson)
+            // [FIX-EXCEPTION-MOTOR] 08/2026 - Begin
+            // Sequence/Recover em volta do motor - excecao de runtime nao
+            // tratada vira erro normal em vez de derrubar o Job inteiro
+            // sem callback. Ver U_PI_ERRO_RT (FATZZF01.prw).
+            bErrOld := ErrorBlock({|oErr| Break(oErr)})
+            Begin Sequence
+                aRet := ZZC_MotorEntrada(jJson)
+            Recover Using oErrRT
+                aRet := {.F., "EXCEPTION: " + U_PI_ERRO_RT(oErrRT), ""}
+            End Sequence
+            ErrorBlock(bErrOld)
             lOk  := aRet[1]
             cSub := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
             If lOk

@@ -307,13 +307,14 @@ Return lRet
 
 // ==========================================================================
 // MontaErroModel — GetErrorMessage() do MVC (FWModelAtributes) as vezes
-// devolve STRING (erro generico de model) e as vezes ARRAY (erro de
-// validacao de campo especifico - formato {tipo, id, alias, campo,
-// desc_campo, mensagem, solucao, ?, valor}, achado em teste real via
-// PI_CLI_X/A1_COD_MUN). Gravar esse array direto em ZZ*_ERRMSG (esperado
-// como string) quebra - essa funcao extrai [2][4] (nome do campo) e
-// [2][9] (valor que causou o erro) e monta uma mensagem legivel; se ja
-// vier string, so devolve como veio.
+// devolve STRING (erro generico de model) e as vezes ARRAY DIRETO de 9
+// posicoes (erro de validacao de campo especifico - formato {tipo, id,
+// alias, campo, desc_campo, mensagem, solucao, ?, valor}, achado em
+// teste real via PI_CLI_X/A1_COD_MUN - conferido no debugger, uErro JA
+// E o array de 9 posicoes, sem aninhamento extra). Gravar esse array
+// direto em ZZ*_ERRMSG (esperado como string) quebra - essa funcao
+// extrai [4] (nome do campo) e [9] (valor que causou o erro) e monta
+// uma mensagem legivel; se ja vier string, so devolve como veio.
 // [ZZG] Jose Carlos - Artiq - 08/2026
 // ==========================================================================
 Static Function MontaErroModel(uErro)
@@ -322,9 +323,9 @@ Static Function MontaErroModel(uErro)
 	Local cValor := ""
 
 	If ValType(uErro) == "A"
-		If Len(uErro) >= 2 .And. ValType(uErro[2]) == "A"
-			If Len(uErro[2]) >= 4 ; cCampo := AllTrim(cValToChar(uErro[2][4])) ; EndIf
-			If Len(uErro[2]) >= 9 ; cValor := AllTrim(cValToChar(uErro[2][9])) ; EndIf
+		If Len(uErro) >= 9
+			cCampo := AllTrim(cValToChar(uErro[4]))
+			cValor := AllTrim(cValToChar(uErro[9]))
 			cMsg := "Conteudo invalido para o campo " + cCampo
 			If !Empty(cValor)
 				cMsg += ": " + cValor

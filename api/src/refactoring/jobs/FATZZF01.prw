@@ -401,6 +401,40 @@ Return
 // Este arquivo (FATZZF01) precisa compilar ANTES dos demais Jobs FATZZ*.
 // ==========================================================================
 
+// ==========================================================================
+// PI_ERRO_RT - monta uma mensagem legivel a partir de um objeto Error do
+// AdvPL, pra uso dentro de Begin Sequence/Recover Using nos Jobs de
+// NFe/NFCe (FATZZ901/A01/B01/C01/D01).
+// [FIX-EXCEPTION-MOTOR] 08/2026
+// Motivo: motor de NFe travando com excecao de runtime nao tratada (caso
+// real: erro ligado a uma stored procedure do banco, so resolvivel via
+// suporte TOTVS) - sem captura, a excecao derrubava o Job inteiro e a nota
+// ficava presa em STATUS='A' pra sempre, sem callback de erro nenhum
+// (mesmo sintoma ja diagnosticado antes pra ZZG/PI_CLI_X). Begin
+// Sequence/Recover NAO corrige a causa raiz (isso continua dependendo da
+// TOTVS) - so evita que a excecao derrube o Job sem deixar rastro,
+// convertendo pra um {.F., msg} normal que ja flui pelo tratamento de erro
+// existente (U_UPDSTAT/U_ZZCALLBK).
+// ==========================================================================
+User Function PI_ERRO_RT(oErro)
+    Local cMsg := ""
+
+    If ValType(oErro) == "O"
+        cMsg := "Excecao nao tratada"
+        If !Empty(oErro:Description)
+            cMsg += ": " + AllTrim(cValToChar(oErro:Description))
+        EndIf
+        If oErro:GenCode != Nil .And. oErro:GenCode != 0
+            cMsg += " (GenCode " + cValToChar(oErro:GenCode) + IIF(oErro:OsCode != Nil .And. oErro:OsCode != 0, "/OsCode " + cValToChar(oErro:OsCode), "") + ")"
+        EndIf
+        If !Empty(oErro:Operation)
+            cMsg += " | Operacao: " + AllTrim(cValToChar(oErro:Operation))
+        EndIf
+    Else
+        cMsg := "Excecao nao tratada: " + cValToChar(oErro)
+    EndIf
+Return cMsg
+
 User Function UPDSTAT(cTab, cCod, cStatus, cMsg)
     Local cCampCod := cTab + "_COD"
     Local cCampSts := cTab + "_STATUS"

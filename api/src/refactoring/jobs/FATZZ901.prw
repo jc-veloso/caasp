@@ -54,6 +54,8 @@ User Function FATZZ901()
     Local jJson      := Nil
     Local aRet       := {}
     Local dDataBaseSis := CToD("")
+    Local bErrOld    := Nil
+    Local oErrRT     := Nil
 
     Private __cBatch := "1"
 
@@ -116,7 +118,17 @@ User Function FATZZ901()
 
         jJson := JsonObject():New()
         If Empty(jJson:FromJson(cJson))
-            aRet := ZZ901_Classifica(jJson)
+            // [FIX-EXCEPTION-MOTOR] 08/2026 - Begin
+            // Sequence/Recover em volta da classificacao - excecao de
+            // runtime nao tratada vira erro normal em vez de derrubar o
+            // Job inteiro sem callback. Ver U_PI_ERRO_RT (FATZZF01.prw).
+            bErrOld := ErrorBlock({|oErr| Break(oErr)})
+            Begin Sequence
+                aRet := ZZ901_Classifica(jJson)
+            Recover Using oErrRT
+                aRet := {.F., "EXCEPTION: " + U_PI_ERRO_RT(oErrRT)}
+            End Sequence
+            ErrorBlock(bErrOld)
             lOk  := aRet[1]
             If lOk
                 cTabPai := IIF(Len(aRet) >= 3, aRet[3], "")

@@ -4,13 +4,13 @@
 #Include 'FWMVCDef.ch'
 #INCLUDE "TBICONN.CH"
 
-/*/{Protheus.doc} WSRESTFUL FATPI03
+/*/{Protheus.doc} WSRESTFUL FATPI03V1
 API de Fornecedores CAASP - Inclusao de campos bancarios e validacao de Municipio
 @author ANTONIO NUNES
 @since 24/02/2026
 /*/
 
-WSRESTFUL FATPI03 DESCRIPTION 'Fornecedor CAASP - Endpoint FATPI03'
+WSRESTFUL FATPI03V1 DESCRIPTION 'Fornecedor CAASP - Endpoint FATPI03V1'
 	WSDATA cnpj AS STRING
 
 	WSMETHOD GET SEARCH_CNPJ DESCRIPTION 'Busca fornecedor por CNPJ' PATH '/' PRODUCES APPLICATION_JSON
@@ -20,7 +20,7 @@ END WSRESTFUL
 // ============================================================================
 // METODO GET - Busca por CNPJ
 // ============================================================================
-WSMETHOD GET SEARCH_CNPJ WSSERVICE FATPI03
+WSMETHOD GET SEARCH_CNPJ WSSERVICE FATPI03V1
 	Local jResponse := JsonObject():New()
 	Local cCGC      := ""
 
@@ -57,7 +57,7 @@ Return .T.
 // ============================================================================
 // METODO POST - Upsert com Dados Bancarios
 // ============================================================================
-WSMETHOD POST NEW WSRECEIVE WSSERVICE FATPI03
+WSMETHOD POST NEW WSRECEIVE WSSERVICE FATPI03V1
 	Local aDados    := {}
 	Local jJson     := JsonObject():New()
 	Local jItems    := {}

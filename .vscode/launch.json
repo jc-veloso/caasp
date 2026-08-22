@@ -22,8 +22,17 @@
 		},
 		{
 			"label": "u_fatzzd01"
+		},
+		{
+			"label": "u_FATZZ901"
+		},
+		{
+			"label": "u_FATZZG01"
+		},
+		{
+			"label": "u_FATZZA01"
 		}
 	],
-	"lastProgramExecuted": "u_fatzzd01",
+	"lastProgramExecuted": "u_FATZZA01",
 	"lastProgramArguments": []
 }

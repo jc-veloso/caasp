@@ -12,7 +12,7 @@
 |                                                                             |
 | [ZZG] Mesmo esqueleto do FATPI10.prw (produto pendente), adaptado pra     |
 |   cliente/fornecedor - ver instrucao_zzg_cliente_fornecedor.md pro        |
-|   contexto completo. Diferenca chave: aqui o Arthur ja manda o cadastro   |
+|   contexto completo. Diferenca chave: aqui o iPaaS ja manda o cadastro   |
 |   TRATADO e pronto em "dados" (nao so um codigo, como no FATPI10) - nao   |
 |   precisa consultar API externa nenhuma, o Job (FATZZG01) so chama       |
 |   U_PI_CLI_X/U_PI_FORN_X direto com o JSON recebido.                     |
@@ -23,13 +23,13 @@
 |   nunca chegam a existir com cliente/fornecedor pendente (so sao         |
 |   gravadas DEPOIS que ZZ901_Classifica ja resolveu com sucesso), e ZZE    |
 |   (Recibo) fica fora de escopo - decisao consciente do Mauricio,          |
-|   confirmada pelo Arthur (ver instrucao, "seguimos com o recibo no       |
+|   confirmada pelo iPaaS (ver instrucao, "seguimos com o recibo no       |
 |   modelo antigo"). Por isso a busca da nota pai aqui e mais restrita que |
 |   a do FATPI10 (que precisa cobrir produto pendente em qualquer         |
 |   dominio, inclusive ZZA/ZZB/ZZC/ZZE).                                    |
 |                                                                             |
 | [CONTRATO-CONFIRMADO-V2] Jose Carlos - Artiq - 08/2026                    |
-|   Contrato mudou de novo (confirmado com o Arthur em 16/08, ver          |
+|   Contrato mudou de novo (confirmado com o iPaaS em 16/08, ver          |
 |   instrucao_sync_pi_cli_forn_2.md) - "tipo" nao e mais CLI/FOR, agora e   |
 |   o TIPO DA NOTA (mesmo dominio de ZZG_TIPONF - "ZZ9" pra NFe, "NFC"      |
 |   pra NFCe). Quem carrega CLI/FOR agora e o campo novo                   |

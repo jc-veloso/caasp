@@ -113,7 +113,7 @@ User Function FATZZF01()
                 ConOut("[FATZZF01] Nota liberada na " + cTabPai + " | Chave: " + cChvRef)
 
                 // [FIX-CALLBACK-PRODUTO] Jose Carlos - Artiq - 08/2026
-                // Pedido do Arthur: mesmo endpoint oficial de Notas Fiscais na
+                // Pedido do iPaaS: mesmo endpoint oficial de Notas Fiscais na
                 // liberacao de produto, nao so no processamento final.
                 // [REV-ZZCALLBK-UNIFICADO] Jose Carlos - Artiq - 08/2026
                 // Recibo (ZZE) agora usa o mesmo callback unificado das Notas
@@ -124,7 +124,7 @@ User Function FATZZF01()
                 nTIni := Seconds()
                 // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
                 // Callback intermediario de liberacao desativado - pendente
-                // alinhar com Arthur a semantica exata de
+                // alinhar com iPaaS a semantica exata de
                 // flg_Processamento="A". Reavaliar antes de reativar. So o
                 // callback do processamento final da nota (FATZZA01/B01/
                 // C01/D01/E01) continua ativo.
@@ -142,7 +142,7 @@ User Function FATZZF01()
 
             // [NOTIFICA-FALHA] Jose Carlos - Artiq - 08/2026
             // Produto nao pode ser cadastrado apos esgotar o retry - a nota
-            // nunca vai liberar sozinha, avisa o Arthur em vez de deixar
+            // nunca vai liberar sozinha, avisa o iPaaS em vez de deixar
             // represada silenciosamente. cod_Subseccao vai vazio (decisao
             // consciente - o payload de aviso de produto pendente nao traz
             // esse dado, e nao vale reabrir a nota pai so pra buscar).
@@ -161,7 +161,7 @@ User Function FATZZF01()
             nTIni := Seconds()
             // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
             // Callback intermediario de liberacao desativado - pendente
-            // alinhar com Arthur a semantica exata de
+            // alinhar com iPaaS a semantica exata de
             // flg_Processamento="A". Reavaliar antes de reativar. So o
             // callback do processamento final da nota (FATZZA01/B01/
             // C01/D01/E01) continua ativo.
@@ -219,7 +219,7 @@ Static Function ZZF_CADPRD(cCodLeg)
     //      de token vencido/revogado e o MV_XCPTOK precisa ser atualizado.
     //
     // [RETRY-CAASP] Jose Carlos - Artiq - 08/2026
-    // API da CAASP e instavel (confirmado com o Arthur) - so a chamada HTTP
+    // API da CAASP e instavel (confirmado com o iPaaS) - so a chamada HTTP
     // reentra (rede/HTTP), nunca o "produto nao encontrado" (items vazio):
     // isso e resultado definitivo, nao instabilidade, retry nao ajuda nesse
     // caso. MV_XCPRET = tentativas adicionais (default 5, "0" desativa).
@@ -409,6 +409,9 @@ User Function UPDSTAT(cTab, cCod, cStatus, cMsg)
     Local cCampHrP := cTab + "_HRPROC"
     Local cQry     := ""
     Local nRet     := 0
+    Local cQryAux  := ""
+    Local cAliAux  := ""
+    Local nRecno   := 0
 
     cQry := "UPDATE " + RetSqlName(cTab) + " SET " + cCampSts + " = '" + cStatus + "'"
     // [FIX-ZZF-DTPROC] Jose Carlos - Artiq - 08/2026
@@ -434,19 +437,33 @@ User Function UPDSTAT(cTab, cCod, cStatus, cMsg)
     // qualquer mensagem com caractere fora do range hex (a maioria -
     // reproduzido em teste real, "NFORIGEM: ..."). O acento em "nao"
     // NUNCA foi a causa raiz - so uma correcao real porem incompleta.
-    // Escrita de memo precisa passar pela area nativa (RecLock/FieldPut),
-    // nao por SQL direto - mesmo cuidado ja documentado pro campo _JSON
-    // (aquele e leitura, este e escrita). Separado do UPDATE acima -
-    // STATUS/DTPROC/HRPROC continuam via TCSqlExec (campos Character,
-    // sem esse problema).
+    // [FIX-ERRMSG-ATRIBUICAO-DIRETA] Jose Carlos - Artiq - 08/2026
+    // MSMM e so pra memo de CONTEXTO VIRTUAL (indirecao via SYP/RDY,
+    // caso classico e o par campo real/virtual tipo B1_CODOBS/B1_OBS).
+    // ZZ*_ERRMSG e memo de contexto REAL (criado direto na estrutura da
+    // propria tabela ZZ*, nao e um retrofit tipo B1_OBS) - usa atribuicao
+    // direta (FieldPut), nao MSMM (ver https://centraldeatendimento.totvs.
+    // com/hc/pt-br/articles/4409604126103). O branco da primeira tentativa
+    // com FieldPut nao era por causa disso - era o DbSeek nao achando o
+    // registro (assumia ordem 1 = FILIAL+COD, pode nao ser essa a ordem
+    // real). Corrigido posicionando por R_E_C_N_O_ via SQL (mesmo padrao
+    // ja usado em todos os Jobs pra reabrir a area nativa), sem depender
+    // de qual indice e qual.
     If !Empty(cMsg)
-        DbSelectArea(cTab)
-        (cTab)->(DbSetOrder(1))
-        If (cTab)->(DbSeek(xFilial(cTab) + PadR(cCod, TamSx3(cCampCod)[1])))
+        cQryAux := "SELECT R_E_C_N_O_ AS REC FROM " + RetSqlName(cTab) + " WHERE " + cCampCod + " = '" + cCod + "' AND D_E_L_E_T_ = ' '"
+        cAliAux := GetNextAlias()
+        MpSysOpenQuery(cQryAux, cAliAux)
+        If (cAliAux)->(!Eof())
+            nRecno := (cAliAux)->REC
+            (cAliAux)->(DbCloseArea())
+            DbSelectArea(cTab)
+            (cTab)->(DbGoto(nRecno))
             If RecLock(cTab, .F.)
                 (cTab)->(FieldPut(FieldPos(cCampMsg), Left(cMsg, 2000)))
                 (cTab)->(MsUnlock())
             EndIf
+        Else
+            (cAliAux)->(DbCloseArea())
         EndIf
     EndIf
 Return
@@ -604,7 +621,7 @@ Return lRet
 // [REV-ZZCALLBK-UNIFICADO] Jose Carlos - Artiq - 08/2026
 // Notas Fiscais (ZZ9/ZZA/ZZB/ZZC/ZZD, inclui NFCe) e Recibo (ZZE) agora
 // compartilham o MESMO formato de payload (cod_Subseccao/des_Processamento/
-// flg_Processamento), conforme os dois docs do Arthur ("Notas Fiscais (01)"
+// flg_Processamento), conforme os dois docs do iPaaS ("Notas Fiscais (01)"
 // e "Recibos de Venda (08)") - so mudam a URL do endpoint iPaaS e o nome do
 // campo-chave (cod_ChaveNFe pra Nota Fiscal, num_PedidoReciboVenda pra
 // Recibo). Antes o Recibo usava um mecanismo generico a parte (MV_XIPURL +
@@ -643,7 +660,7 @@ Return()
 // antes eram CBackNotaF (Notas Fiscais) e CBackRecib (Recibo, mecanismo
 // generico antigo via MV_XIPURL) - ver ZZCALLBK acima pra roteamento por
 // dominio (URL/campo-chave/prefixo de mensagem).
-// Payload conforme docs do Arthur ("Notas Fiscais (01)" e "Recibos de Venda
+// Payload conforme docs do iPaaS ("Notas Fiscais (01)" e "Recibos de Venda
 // (08)"): { <cCampoChave>: cChave, cod_Subseccao: n, des_Processamento: "...",
 // flg_Processamento: "S"/"E" }
 // des_Processamento sucesso: "<cMsgPad>: [filial] - [documento]"
@@ -652,7 +669,7 @@ Return()
 //   chega aqui via cMsgCustom, nao via cFilNota/cDocumento separados.
 // des_Processamento erro: mensagem de erro tratada (cMsgErro)
 // flg_Processamento: Protheus so envia "S" ou "E" aqui - os valores "P"
-//   (produto pendente) e "A" (nota em andamento) do doc do Arthur sao
+//   (produto pendente) e "A" (nota em andamento) do doc do iPaaS sao
 //   setados do lado do iPaaS, no armazenamento do proprio iPaaS.
 // ==========================================================================
 Static Function CBackIpaas(cUrl, cCampoChave, cMsgPad, cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento, cMsgErro, cMsgCustom)

@@ -168,7 +168,7 @@ User Function FATZZD01()
                 // [FIX-MSG-DUPLICIDADE] Jose Carlos - Artiq - 08/2026
                 // aRet[2] (mensagem descritiva do motor - inclui "Ja
                 // processada anteriormente: ..." no caso de duplicidade,
-                // pedido do Arthur, vale igual pra NFCe) antes se perdia
+                // pedido do iPaaS, vale igual pra NFCe) antes se perdia
                 // aqui. Repassado como cMsgCustom (8o parametro).
                 cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else
@@ -321,7 +321,7 @@ Static Function ZZD_MotorNFCe(jJson)
     // aqui de qualquer jeito). Ganha de brinde a limpeza SFT/SF3 que este
     // motor nunca teve (FATZZA01/NFe Saida ja tinha). Mensagem de
     // duplicidade padronizada pro mesmo formato usado pelas outras filas
-    // ("Ja processada anteriormente: " + cNF) - pedido do Arthur de
+    // ("Ja processada anteriormente: " + cNF) - pedido do iPaaS de
     // mensagem explicita vale igual pra NFCe, nao so NFe.
     nValNF := U_PI_VAL_X(oData, 'num_NF', 'num_NotaFiscal')
     aNum := U_PI_NUMERA_X("SF2", "F2_DOC", cSer, cCod, cLoja, IIF(nValNF == 0, "", cValToChar(nValNF)))

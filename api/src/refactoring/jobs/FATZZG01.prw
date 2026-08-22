@@ -28,7 +28,7 @@ Static CFILPAD := "01001"
 |   sincrona GET CAASP -> POST FATPI03/FATPI06 -> espera resposta que o    |
 |   iPaaS fazia antes de mandar a nota). Mesmo padrao ja validado pra       |
 |   produto pendente (ZZF/FATPI10/FATZZF01), mais simples que aquele -     |
-|   nao ha consulta a API externa nenhuma aqui: o Arthur ja manda o        |
+|   nao ha consulta a API externa nenhuma aqui: o iPaaS ja manda o        |
 |   cadastro TRATADO e pronto (ZZG_JSON), U_PI_CLI_X/U_PI_FORN_X so        |
 |   fazem o upsert direto.                                                  |
 |                                                                             |
@@ -40,7 +40,7 @@ Static CFILPAD := "01001"
 |   Parte 5 da instrucao. ZZA/ZZB/ZZC nunca tem nota com cliente/           |
 |   fornecedor pendente (so sao gravadas depois que ZZ901_Classifica ja     |
 |   resolveu com sucesso) e ZZE (Recibo) fica fora de escopo por decisao    |
-|   consciente (Mauricio/Arthur). ZZG_TIPONF portanto so assume "ZZ9" ou    |
+|   consciente (Mauricio/iPaaS). ZZG_TIPONF portanto so assume "ZZ9" ou    |
 |   "NFC" na pratica hoje.                                                  |
 +----------------------------------------------------------------------------+
 */
@@ -132,7 +132,7 @@ User Function FATZZG01()
                 nTIni := Seconds()
                 // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
                 // Callback intermediario de liberacao desativado - pendente
-                // alinhar com Arthur a semantica exata de
+                // alinhar com iPaaS a semantica exata de
                 // flg_Processamento="A". Reavaliar antes de reativar. So o
                 // callback do processamento final da nota (FATZZA01/B01/
                 // C01/D01/E01) continua ativo.
@@ -146,11 +146,11 @@ User Function FATZZG01()
 
             // [NOTIFICA-FALHA] Mesmo padrao do FATZZF01: cadastro nao pode
             // ser feito apos falha - a nota nunca vai liberar sozinha,
-            // avisa o Arthur em vez de deixar represada silenciosamente.
+            // avisa o iPaaS em vez de deixar represada silenciosamente.
             cTabPai := IIF(cTipoNF == "ZZ9", "ZZ9", "ZZD")
             // [TEMP-CALLBACK-OFF] Jose Carlos - Artiq - 08/2026
             // Callback intermediario de liberacao desativado - pendente
-            // alinhar com Arthur a semantica exata de
+            // alinhar com iPaaS a semantica exata de
             // flg_Processamento="A". Reavaliar antes de reativar. So o
             // callback do processamento final da nota (FATZZA01/B01/
             // C01/D01/E01) continua ativo.

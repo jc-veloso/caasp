@@ -387,7 +387,7 @@ User Function PI_CLI_X(oJson)
         oSA1Mod:SetValue("A1_TIPO"   , "F")
         // [FIX-SYNC-PICLI] Jose Carlos - Artiq - 08/2026
         // A1_PESSOA fixo em "F" era divergente do FATPI06.prw ja corrigido
-        // contra payload real do Arthur (Json tabela muro Cliente.txt) -
+        // contra payload real do iPaaS (Json tabela muro Cliente.txt) -
         // ver instrucao_sync_pi_cli_forn.md, item 1.2. F/J por tamanho do
         // documento (CPF 11 digitos / CNPJ 14).
         If Len(U_PI_STR_X(oJson, "cpf")) = 11
@@ -506,7 +506,7 @@ User Function PI_FORN_X(jItem)
     oModel:SetValue("SA2MASTER", "A2_CEP" , StrTran(cValToChar(jItem["num_CEP"]), "-", ""))
     // [FIX-SYNC-PIFORN] Jose Carlos - Artiq - 08/2026
     // A2_COD_MUN/A2_CODPAIS ausentes - divergente do FATPI03.PRW ja
-    // corrigido contra payload real do Arthur (Json tabela muro
+    // corrigido contra payload real do iPaaS (Json tabela muro
     // Fornecedor.txt) - ver instrucao_sync_pi_cli_forn.md, item 2.2.
     oModel:SetValue("SA2MASTER", "A2_COD_MUN", AllTrim(cValToChar(jItem["cod_IBGE"])))
     oModel:SetValue("SA2MASTER", "A2_CODPAIS", cValToChar(jItem["cod_pais"]))

@@ -102,7 +102,7 @@ User Function FATZZB01()
                 // [FIX-MSG-DUPLICIDADE] Jose Carlos - Artiq - 08/2026
                 // aRet[2] (mensagem descritiva do motor - inclui "Ja
                 // processada anteriormente: ..." no caso de duplicidade,
-                // pedido do Arthur) antes se perdia aqui, nunca chegava no
+                // pedido do iPaaS) antes se perdia aqui, nunca chegava no
                 // callback. Repassado como cMsgCustom (8o parametro).
                 cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else

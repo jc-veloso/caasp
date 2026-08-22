@@ -3,28 +3,9 @@
 #Include 'TopConn.ch'
 #Include 'RestFul.ch'
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Antonio Nunes O Jr / Jose Carlos - Artiq                            |
-| Data: 07/2026                                                              |
-| Descritivo: FATPI01S - Motor de Saida (Vendas)                            |
-|             PI_ROLLBACK_NF - Estorno de saida em caso de falha            |
-|             GET_REC_JSON   - Extracao segura de recebimentos do JSON       |
-|             JSON_VENDA     - Pos-gravacao fiscal/financeiro saida          |
-|             FZ_GER_E1      - Geracao titulos a receber (SE1)              |
-|             FATPI01NF      - Auto-entrada transferencia (Convenios)        |
-|             PI_SAIDA_X      - Motor MaNfs2Nfs                              |
-|             RetOpera       - Resolve operacao/CST para TES                 |
-|             PI_LOJA_X       - Motor LOJA701 (NFCe via SIGALOJA)            |
-+----------------------------------------------------------------------------+
-*/
+// Motor de saida (venda) - gera a nota via MaNfs2Nfs/LOJA701 e ajusta titulos financeiros
 
-// [MIGRADO-DO-ENDPOINT] Jose Carlos - Artiq - 08/2026
-// Promovida de Static para User Function (e renomeada de FZ_ para PI_,
-// seguindo a convencao do projeto) - antes so era chamada de dentro do
-// proprio FATPI01_V2 (mesmo lote de compilacao), sem precisar de U_. Agora
-// o CONVENIOS+rollback migrou para o FATZZA01.prw (Job, lote de compilacao
-// separado), que so enxerga funcoes globais via U_.
+// Estorna uma nota de saida (SF2/SD2/SF3/SFT/SE1) e devolve o estoque reservado (SB2)
 User Function PI_ROLLBACK_NF(cDoc, cSer, cCli, cLoja)
 	Local cQryAux := ""
 	Local cAliAux := ""
@@ -32,7 +13,6 @@ User Function PI_ROLLBACK_NF(cDoc, cSer, cCli, cLoja)
 	Local cProd   := ""
 	Local cLoc    := ""
 
-	// 1. Estornar Saldo em Estoque (SB2)
 	cQryAux := "SELECT D2_COD, D2_LOCAL, D2_QUANT FROM " + RetSqlName("SD2") + " WHERE D2_DOC = '" + cDoc + "' AND D2_SERIE = '" + cSer + "' AND D2_CLIENTE = '" + cCli + "' AND D2_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
 	cAliAux := GetNextAlias()
 	MpSysOpenQuery(cQryAux, cAliAux)
@@ -53,7 +33,6 @@ User Function PI_ROLLBACK_NF(cDoc, cSer, cCli, cLoja)
 	EndDo
 	(cAliAux)->(DbCloseArea())
 
-	// 2. Soft Delete nas Tabelas Fiscais e Financeiras
 	cQryAux := "UPDATE " + RetSqlName("SF2") + " SET D_E_L_E_T_ = '*', R_E_C_D_E_L_ = R_E_C_N_O_ WHERE F2_DOC = '" + cDoc + "' AND F2_SERIE = '" + cSer + "' AND F2_CLIENTE = '" + cCli + "' AND F2_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
 	TCSqlExec(cQryAux)
 
@@ -71,25 +50,13 @@ User Function PI_ROLLBACK_NF(cDoc, cSer, cCli, cLoja)
 Return
 
 
-// ==========================================================================
-// COMPRAS (ENTRADAS) - MOTOR MATA120
-// ==========================================================================
-// [FIX-LOTE-COMPILACAO] Jose Carlos - Artiq - 08/2026
-// Promovida de Static Function pra User Function - mesma classe de bug
-// ja corrigida em RetOpera/FZ_VALID_DEV: era so visivel dentro de
-// FATPI01S.prw, mas U_JSON_COMPRA (FATPI01E.prw) tambem chama - erro
-// reproduzido em teste real ("cannot find function GET_REC_JSON in
-// AppMap" em U_JSON_COMPRA). Chamadores atualizados de GET_REC_JSON(...)
-// pra U_GET_REC_JSON(...), inclusive os locais aqui embaixo (mesmo
-// padrao ja usado em todo o codebase).
+// Le um campo do primeiro item de recebimentos/pagamentos do JSON, com fallback
 User Function GET_REC_JSON(oHead, cCampoReq, cCampoPag, nVlrFall)
-	// --- 1. DECLARACAO DE VARIAVEIS ---
 	Local cRet    := ""
 	Local oItm    := Nil
 	Local xRecVal := Nil
 	Local aPag    := Nil
 
-	// --- 2. LOGICA DE PROCESSAMENTO ---
 	If ValType(oHead) == "J" .Or. ValType(oHead) == "O"
 		If oHead:HasProperty("recebimentos")
 			xRecVal := oHead["recebimentos"]
@@ -142,15 +109,8 @@ User Function GET_REC_JSON(oHead, cCampoReq, cCampoPag, nVlrFall)
 
 				Return cRet
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Antonio Nunes O Jr | Data: 18/04/2026                               |
-| Descritivo: JSON_VENDA - Tratamento Cirurgico Pos-Gravacao (SQL/RecLock)   |
-|             (Cofre V1 + Mapeamento Avancado e Condicional de ICMS/ST)      |
-+----------------------------------------------------------------------------+
-*/
+// Reforca via SQL direto no SF2/SD2/SF3/SFT os campos que MaNfs2Nfs nao grava (impostos, chave NFe, historico)
 Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
-	// --- 1. DECLARACAO DE VARIAVEIS ---
 	Local cDocSql     := AllTrim(cDoc)
 	Local cSerSql     := AllTrim(cSer)
 	Local cCliSql     := AllTrim(cCli)
@@ -236,7 +196,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 	Local nPReducSt   := 0
 	Local cNewSFT     := GetNextAlias()
 
-	// --- 2. LOGICA DE PROCESSAMENTO ---
 	cNatItm     := U_GET_REC_JSON(oHead, "cod_NaturezaFinanceira", "", "")
 	cCCItm      := U_GET_REC_JSON(oHead, "cod_CentroCusto", "", "")
 	cFormaRec   := U_GET_REC_JSON(oHead, "des_FormaRecebimento", "des_FormaPagamento", "")
@@ -245,23 +204,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 	cAutorizF   := U_GET_REC_JSON(oHead, "des_Autorizacao", "", "")
 	nVlrTitulo  := U_GET_REC_JSON(oHead, "VLR", "", nVlrBrutV)
 
-	/*cCnpjU  := U_PI_LIMPA_X(U_PI_STR_X(oHead, "num_SubseccaoCNPJ", "num_SubseccaoCNPJ"))
-	aEmpFil := FATPIEMP(cCnpjU) */
-
-	/*cQryRec := "UPDATE " + RetSqlName("SFT") + " SET "
-	cQryRec += "FT_ESTADO = '" + SF2->F2_EST + "', "
-	cQryRec += "FT_ESPECIE = '" + SF2->F2_ESPECIE + "', "
-	cQryRec += "FT_CHVNFE = '" + SF2->F2_CHVNFE + "', "
-	cQryRec += " WHERE FT_NFISCAL ='" + cDocPad + "' AND FT_SERIE='" + cSerPad + "' AND FT_CLIEFOR='" + cCliPad + "' AND FT_LOJA='" + cLojaPad + "' AND FT_TIPOMOV = 'S' AND D_E_L_E_T_=' '"
-	TCSqlExec(cQryRec)*/
-
-	/*if Len(aEmpFil) > 0
-		If aEmpFil[1] != cEmpAnt .Or. aEmpFil[2] != cFilAnt
-			RPCClearEnv()
-			RpcSetEnv(aEmpFil[1], aEmpFil[2])
-		EndIf
-	Endif*/
-
 	If ValType(aPrd) == "A"
 		If Len(aPrd) > 0
 			If ValType(aPrd[1]) == "O" .Or. ValType(aPrd[1]) == "J"
@@ -269,7 +211,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 					nQtdItm     := Max(U_PI_VAL_X(aPrd[nX], 'qtd_Produto'), 1)
 					nVlrUniItm  := U_PI_VAL_X(aPrd[nX], 'vlr_ProdutoUnitario')
 
-					// MULTIPLICANDO O DESCONTO PELA QUANTIDADE
 					nDescItm    := Round(U_PI_VAL_X(aPrd[nX], 'vlr_ProdutoDescontoUnitario') * nQtdItm, 2)
 
 					nSomaMerc   += Round(nQtdItm * nVlrUniItm, 2)
@@ -311,7 +252,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 		cEstCli := Posicione("SA1", 1, xFilial("SA1") + cCliSql + cLojaSql, "A1_EST")
 	EndIf
 
-	// ATUALIZACAO DO CABECALHO (SF2)
 	cQryRec := "SELECT R_E_C_N_O_ AS REC FROM " + RetSqlName("SF2") + " WHERE F2_DOC='" + cDocPad + "' AND F2_SERIE='" + cSerPad + "' AND F2_CLIENTE='" + cCliPad + "' AND F2_LOJA='" + cLojaPad + "' AND D_E_L_E_T_=' '"
 	cAliRec := GetNextAlias()
 	MpSysOpenQuery(cQryRec, cAliRec)
@@ -375,7 +315,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 	EndIf
 	(cAliRec)->(DbCloseArea())
 
-	// ATUALIZACAO DOS ITENS (SD2) E LIVRO (SF3)
 	If Select("SF3") > 0
 		cQrySF3 := "DELETE FROM " + RetSqlName("SF3") + " WHERE F3_NFISCAL='" + cDocPad + "' AND F3_SERIE='" + cSerPad + "' AND F3_CLIEFOR='" + cCliPad + "' AND F3_LOJA='" + cLojaPad + "' AND D_E_L_E_T_=' '"
 		TCSqlExec(cQrySF3)
@@ -395,7 +334,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 					nVlrBrutItm := Round(nQtdItm * nVlrUniItm, 2)
 					nVlrLiqItm  := Round(nVlrBrutItm - nDescItm, 2)
 
-					// Extracao Fiscal
 					nPicmItem   := U_PI_VAL_X(aPrd[nX], 'pct_ProdutoICMS')
 					nBicmItem   := U_PI_VAL_X(aPrd[nX], 'vlr_ProdutoICMSBaseCalculo')
 					nVicmItem   := U_PI_VAL_X(aPrd[nX], 'vlr_ProdutoICMS')
@@ -427,10 +365,8 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 					cQryRec += "D2_TOTAL = " + StrTran(cValToChar(nVlrBrutItm), ",", ".") + ", "
 					cQryRec += "D2_DESCON = " + StrTran(cValToChar(nDescItm), ",", ".") + ", "
 
-					// Sem virgula final para receber condicional
 					cQryRec += "D2_DESC = " + StrTran(cValToChar(nPercDesc), ",", ".")
 
-					// Injeções Fiscais Condicionais
 					If Len(TamSx3("D2_PICM")) > 0
 						cQryRec += ", D2_PICM = " + StrTran(cValToChar(nPicmItem), ",", ".")
 					EndIf
@@ -455,10 +391,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 					If Len(TamSx3("D2_PRDRET")) > 0
 						cQryRec += ", D2_PRDRET = " + StrTran(cValToChar(nPReducSt), ",", ".")
 					EndIf
-
-                    /*If cNatOp == "DEVOLUCAO DE COMPRA"
-                        cQryRec += ", D2_OUTROS = " + StrTran(cValToChar(U_PI_VAL_X(aPrd[nX], 'vlr_ProdutoOutros')), ",", ".") 
-                    EndIf*/
 
 					cQryRec += " WHERE D2_DOC='" + cDocPad + "' AND D2_SERIE='" + cSerPad + "' AND D2_CLIENTE='" + cCliPad + "' AND D2_LOJA='" + cLojaPad + "' AND D2_ITEM='" + cItemSql + "' AND D_E_L_E_T_=' '"
 					TCSqlExec(cQryRec)
@@ -541,7 +473,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 		Next nX
 	EndIf
 
-	// ATUALIZACAO DO FINANCEIRO (SE1)
 	cHistPad := "API: Orig:" + cOrigem + " Aut:" + cAutoriz + " Trans:" + cTransacao
 
 	If Empty(cNatItm)
@@ -583,8 +514,6 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 	While (cAliSE1)->(!Eof())
 		cParcela := (cAliSE1)->E1_PARCELA
 		If Empty(AllTrim(cParcela))
-			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - zero a
-			// esquerda, mesmo padrao do FZ_GER_E1.
 			cParcela := PadL("1", TamSx3("E1_PARCELA")[1], "0")
 		EndIf
 
@@ -594,16 +523,9 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 		cQrySE1 += "E1_NATUREZ = '" + PadR(cNatItm, TamSx3("E1_NATUREZ")[1]) + "', "
 		cQrySE1 += "E1_CCUSTO = '" + PadR(cCCItm, TamSx3("E1_CCUSTO")[1]) + "', "
 		cQrySE1 += "E1_XEVENTO = '" + PadR(cOrigem, TamSx3("E1_XEVENTO")[1]) + "', "
-		// [FIX-SE1-CODFUNC] Jose Carlos - Artiq - 08/2026 - campo novo, sem
-		// precedente no original - ver instrucoes_pendentes_pos_debug_transf.md,
-		// C.1. Guarda Len(TamSx3(...)) por seguranca (ainda nao confirmado
-		// no dicionario).
 		If Len(TamSx3("E1_CODFUNC")) > 0
 			cQrySE1 += "E1_CODFUNC = '" + PadR(Posicione('SA1', 1, FWxFilial('SA1') + cCliPad + cLojaPad, 'A1_XCODRH'), TamSx3("E1_CODFUNC")[1]) + "', "
 		EndIf
-		// [FIX-SE1-MOEDA] Jose Carlos - Artiq - 08/2026 - mesmo valor fixo
-		// que E2_MOEDA ja usa do lado de compras - ver C.2. Campo padrao
-		// do Protheus, sem guarda.
 		cQrySE1 += "E1_MOEDA = 1, "
 
 		cQrySE1 += "E1_VALOR = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
@@ -634,9 +556,7 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 
 	Return
 
-// ==========================================================================
-// COMPRAS (ENTRADAS) - JSON_COMPRA - Tratamento Cirurgico Pos-Gravacao
-// ==========================================================================
+// Auto-entrada da nota no ambiente da filial destino (transferencia/CONVENIOS entre filiais)
 User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest, lIsTransf)
 	Local aRet       := {.F., ""}
 	Local cEmpAtu    := cEmpAnt
@@ -654,15 +574,12 @@ User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest, lIsTrans
 	Local lOkTes     := .T.
 	Local cMsgTes    := ""
 
-	// 1. Troca de Ambiente para Filial de Destino
 	RpcClearEnv()
 	RpcSetEnv(aEmpDest[1], aEmpDest[2], Nil, Nil, "FAT")
 
-	// -> DESLIGA OBRIGATORIEDADE DE PEDIDO DE COMPRAS (APENAS PARA TRANSFERENCIA) <-
 	cOldPcNfe := SuperGetMv("MV_PCNFE", .F., "2")
 	PutMv("MV_PCNFE", "2")
 
-	// 2. Localiza a Filial de Origem (A1/A2) na base da Filial Destino
 	cQryAux := "SELECT A2_COD, A2_LOJA FROM " + RetSqlName("SA2") + " WHERE A2_CGC = '" + cCnpjOrigem + "' AND D_E_L_E_T_ = ' '"
 	cAliAux := GetNextAlias()
 	MpSysOpenQuery(cQryAux, cAliAux)
@@ -675,14 +592,12 @@ User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest, lIsTrans
 	If Empty(cForn)
 		aRet := {.F., "Filial de origem nao cadastrada como fornecedor na base de destino."}
 	Else
-		// 3. Recalcula as regras (TES/CFOP) sob a otica do novo ambiente
 		oMotorRegras := U_FATCFOP01()
 		cCondSafe := PadR(U_PI_COND_X("004"), 3)
 
 		For nI := 1 To Len(aPrd)
 			cAuxC := U_PI_LIMPA_X(U_PI_STR_X(aPrd[nI], 'cod_ProdutoCFOP', 'cfop'))
 
-			// Inverte CFOP para a Otica de Entrada (Ex: 5409 vira 1409)
 			cAuxC := U_PI_INVCFOP(cAuxC, "E")
 
 			aRetCfop := oMotorRegras:ProcessaRegras(aPrd[nI], cAuxC, "")
@@ -717,7 +632,6 @@ User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest, lIsTrans
 		Next nI
 
 		If lOkTes
-			// 4. Chama o motor de Entrada
 			aRet := U_PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, "", "SA2", aEmpDest[2], 0, cCondSafe, lIsTransf)
 		Else
 			aRet := {.F., cMsgTes}
@@ -726,15 +640,12 @@ User Function FATPI01NF(aPrd, oHead, cCnpjOrigem, cDoc, cSer, aEmpDest, lIsTrans
 
 	PutMv("MV_PCNFE", cOldPcNfe)
 
-	// 5. Retorna ao Ambiente Original da API
 	RpcClearEnv()
 	RpcSetEnv(cEmpAtu, cFilAtu, Nil, Nil, "FAT")
 
 Return aRet
 
-// ==========================================================================
-// VENDAS (SAIDAS) - MOTOR DIRETO MANFS2NFS (SA1 E SA2 DINAMICOS E TRANSFERENCIA)
-// ==========================================================================
+// Monta cabecalho/itens dinamicamente pela estrutura de SF2/SD2 e dispara MaNfs2Nfs (faturamento)
 User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTransf, cNF, cSerNF, cLegT, cCond)
 	Local aRet       := {.F.,""}
 	Local cNfGerada  := ""
@@ -760,27 +671,14 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	Local cSerieOri
 	Local cItemOri
 	Local lDevol := .T.
-	// [FIX-TRANSF-CLIENTE] Jose Carlos - Artiq - 08/2026 - cCnpjCli usado
-	// no bloco lIsTransf abaixo pra resolver cliente/loja via SA1 -
-	// restaurado do original (FZ_PROS_X), nao existia aqui ainda. Ver
-	// instrucoes_pendentes_pos_debug_transf.md, A.3.
 	Local cCnpjCli   := U_PI_LIMPA_X(U_PI_STR_X(oHead, "des_DestDocumento", "des_DestDocumento"))
 
 	Local bFiscalSF2 := {|| .T.}
 	Local bFiscalSD2 := {|| .T.}
 
-	// [FIX-FRETE] Jose Carlos - Artiq - 08/2026 - nFreteVlr/nF2FRETE
-	// restaurados, sumiram na extracao pro PI_SAIDA_X atual - ver
-	// instrucao_despesa_frete_debug_transferencia.md. Leitura propria (nao
-	// reaproveita a variavel de JSON_VENDA - escopo de Static Function
-	// separado, e JSON_VENDA roda so depois, tratamento pos-gravacao).
 	Local nFreteVlr  := U_PI_VAL_X(oHead, 'vlr_Frete')
 	Local nF2FILIAL, nF2TIPO, nF2DOC, nF2SERIE, nF2EMISSAO, nF2CLIENTE, nF2LOJA, nF2COND, nF2ESPECIE, nF2EST, nF2FRETE
 	Local nD2FILIAL, nD2DOC, nD2SERIE, nD2CLIENTE, nD2LOJA, nD2TIPO, nD2COD, nD2QUANT, nD2PRCVEN, nD2TOTAL, nD2TES, nD2CF, nD2CC, nD2ITEM, nD2UM, nD2LOCAL, nD2DESCON, nD2FRETE
-	// [FIX-FRETE-SAIDA] Jose Carlos - Artiq - 08/2026 - D2_VALFRE (item)
-	// restaurado, sumiu na extracao pro PI_SAIDA_X atual - ver
-	// instrucoes_pendentes_pos_debug_transf.md, Parte B.2. Compartilhado
-	// por FATZZA01 (NFe) e FATZZD01 (NFCe).
 	Local nFreteItem := 0
 
 	Local nQtdCalc   := 0
@@ -813,10 +711,6 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	cTipoOper := IIF(Alltrim(cTab) == 'SA2', 'D','N')
 
 	If lIsTransf
-		// [FIX-TRANSF-CLIENTE] resolve cliente/loja de destino via SA1
-		// (des_DestDocumento) - sem isso, cCli/cLoja continuam com o valor
-		// do chamador (pode estar errado/vazio pra CONVENIOS). Restaurado
-		// do original, ver instrucoes_pendentes_pos_debug_transf.md, A.3.
 		DbSelectArea("SA1")
 		SA1->(DbSetOrder(3))
 		If SA1->(DbSeek(xFilial("SA1") + cCnpjCli))
@@ -942,20 +836,13 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 		nPrcCalc   := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario')
 		nDescUnit  := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario')
 		nDescTotal := Round(nQtdCalc * nDescUnit, 2)
-		nFreteItem := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoFrete') // [FIX-FRETE-SAIDA] restaurado
+		nFreteItem := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoFrete')
 
 		cNotaOri := PadL(ALLTRIM(U_PI_STR_X(aPrd[nI], 'num_NFOrigem')), 9, '0')
 		cSerieOri := U_PI_STR_X(aPrd[nI], 'cod_SerieOrigem')
 		cItemOri := U_PI_STR_X(aPrd[nI], 'num_ProdutoSequencialOrigem')
 		cChaveOri := U_PI_STR_X(aPrd[nI], 'cod_ChaveNFeOrigem')
 
-		// [FIX-D2FILIAL] Jose Carlos - Artiq - 08/2026
-		// nD2FILIAL era calculado (Ascan) mas nunca usado pra preencher
-		// aItens - diferente de nF2FILIAL, que ja preenchia aCabs[nF2FILIAL]
-		// := xFilial("SF2") no cabecalho. Sem isso, todo item gerado por
-		// U_PI_SAIDA_X ficava com D2_FILIAL em branco (o loop de
-		// inicializacao do array so limpa pra "" - nunca reatribui).
-		// Reproduzido em teste real: 1 de 20 NFCe quebrou por causa disso.
 		If nD2FILIAL > 0
 			aItens[nPos, nD2FILIAL] := xFilial("SD2")
 		EndIf
@@ -1035,12 +922,6 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 		If lDevol
 			cNfGerada := MaNfs2Nfs("", "", cCli, cLoja, cSerPad, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, NIL, aDocOri, aItens, aCabs, .T., bFiscalSF2, bFiscalSD2, NIL, cDocPad)
 		Else
-			// [FIX-ORA01465] Jose Carlos - Artiq - 08/2026
-			// "nao" sem acento - "não" (UTF-8) nessa string hardcoded
-			// causava ORA-01465 (invalid hex number) no TCSqlExec de
-			// U_UPDSTAT quando essa mensagem ia pro ZZA_ERRMSG. Mesmo
-			// motivo pelo qual toda outra mensagem de erro do projeto
-			// (refactoring/) ja evita acento.
 			aRet := {.F., "(MaNfs2Nfs) Nota de origem nao existe na SF1. Favor verificar.",.T.}
 		Endif
 	ELSE
@@ -1057,16 +938,7 @@ User Function PI_SAIDA_X(aPrd, oHead, cCli, cLoja, cLeg, cSer, cFil, cTab, lIsTr
 	EndIf
 	Return aRet
 
-// [FIX-LOTE-COMPILACAO] Jose Carlos - Artiq - 08/2026
-// Promovida de Static Function pra User Function - era so visivel dentro
-// de FATPI01S.prw (lote de compilacao proprio), mas U_PI_GERANF_X
-// (FATPI01E.prw) e o motor de devolucao (FATPI01D.prw) tambem chamam,
-// erro reproduzido em teste real ("cannot find function RETOPERA in
-// AppMap" em U_PI_GERANF_X). Mesmo motivo de sempre nesse codebase (ver
-// BuscaCad/U_BUSCACAD, FZ_ROLLBACK_NF/U_PI_ROLLBACK_NF etc.) - Static
-// Function nao atravessa lote de compilacao diferente. Chamadores
-// (FATPI01D.prw/FATPI01E.prw) atualizados de RetOpera(...) pra
-// U_RetOpera(...).
+// Resolve o codigo de operacao fiscal (SX5 tabela DJ) por operacao+CST, cadastrando um novo se nao existir
 User Function RetOpera(cOper,cCST)
 
 	Local cNewSX5 := GetNextAlias()
@@ -1122,6 +994,7 @@ User Function RetOpera(cOper,cCST)
 	Endif
 Return cRet
 
+// Recria as parcelas de um titulo a receber (SE1) a partir do array de recebimentos do JSON
 Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 
 	Local cQryAux
@@ -1187,8 +1060,6 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_Vencimento'))
 				nVlrP := U_PI_VAL_X(oParcItem, 'vlr_Recebimento')
 
-				// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - se vier
-				// vazio/zero, sempre 1 (nao a posicao no loop).
 				If Empty(cNumP) .Or. cNumP == "0"
 					cNumP := "1"
 				EndIf
@@ -1199,14 +1070,6 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_MSFIL   := xFilial("SE1")
 				SE1->E1_PREFIXO := cSer
 				SE1->E1_NUM     := cDoc
-				// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026
-				// Gravava cParce (contador alfabetico A/B/C via SOMA1) em vez
-				// de cNumP (ja calculado corretamente logo acima a partir de
-				// num_Parcela do JSON, com fallback sequencial 1/2/3 se vier
-				// vazio/zero) - cNumP ficava computado e nunca usado. Mesmo
-				// padrao que FZ_GER_E2 (FATPI01E.prw) ja usa do lado de
-				// compras (E2_PARCELA := cNumP). Campo alfanumerico com zero
-				// a esquerda (confirmado 08/2026 - "1" deve virar "01").
 				SE1->E1_PARCELA := PadL(cNumP, TamSx3("E1_PARCELA")[1], "0")
 				SE1->E1_TIPO    := IIF(!Empty(cTipoTit),cTipoTit,'NF')
 				SE1->E1_XTIPO   := 'NF'
@@ -1214,18 +1077,9 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_CLIENTE := cCli
 				SE1->E1_LOJA    := cLoja
 				SE1->E1_NOMCLI  := Posicione('SA1', 1, FWxFilial('SA1') + SE1->E1_CLIENTE + SE1->E1_LOJA, 'A1_NOME')
-				// [FIX-SE1-CODFUNC] Jose Carlos - Artiq - 08/2026 - campo
-				// novo, sem precedente no original, confirmado com o Jose
-				// Carlos - ver instrucoes_pendentes_pos_debug_transf.md,
-				// C.1. Guarda FieldPos por seguranca (ainda nao confirmado
-				// no dicionario).
 				If SE1->(FieldPos("E1_CODFUNC")) > 0
 					SE1->E1_CODFUNC := Posicione('SA1', 1, FWxFilial('SA1') + SE1->E1_CLIENTE + SE1->E1_LOJA, 'A1_XCODRH')
 				EndIf
-				// [FIX-SE1-MOEDA] Jose Carlos - Artiq - 08/2026 - mesmo
-				// valor fixo que E2_MOEDA ja usa do lado de compras
-				// (FZ_GER_E2) - ver C.2. Campo padrao do Protheus, sem
-				// guarda (mesmo padrao ja usado em E2_MOEDA).
 				SE1->E1_MOEDA   := 1
 				SE1->E1_EMISSAO := SF2->F2_EMISSAO
 				SE1->E1_EMIS1   := SF2->F2_EMISSAO
@@ -1236,7 +1090,6 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_SALDO   := nVlrP
 				SE1->E1_VLCRUZ  := nVlrP
 				SE1->E1_CCUSTO  := cCusto
-//				SE1->E1_ORIGEM  := 'MATA460'
 				SE1->E1_FLUXO   := 'S'
 				SE1->E1_HIST    := cHist
 				SE1->E1_STATUS  := 'A'
@@ -1255,17 +1108,8 @@ Return
 
 
 
-// ==========================================================================
-// PI_LOJA_X - Motor NFCe via ExecAuto LOJA701 (renomeada de FZ_PROS_LOJA)
-// [FIX-10CHAR] Jose Carlos - Artiq - 07/2026
-// U_FZ_PROS_LOJA colidia com U_PI_SAIDA_X — AdvPL so considera os primeiros
-// 10 caracteres do nome (incluindo o U_) na resolucao de simbolo. Ambas
-// comecavam identicas em "U_FZ_PROS_", o compilador barrava por conflito.
-// Renomeada para PI_LOJA_X, que diverge do PI_SAIDA_X ja no 6o caractere.
-// Inclusao de orcamento (parametro 3) via SL1/SLR/SL4 — NAO finaliza venda.
-// ==========================================================================
+// Motor de venda NFCe via LOJA701/SIGALOJA (SL1/SLR/SL4) - sem caller ativo hoje, mantida para referencia
 User Function PI_LOJA_X(aPrd, oHead, cCli, cLoja, cSer, cTab, cCond)
-//	Local aRet       := {.F., ""}
 	Local aCab       := {}
 	Local aItem      := {}
 	Local aLin       := {}
@@ -1287,10 +1131,8 @@ User Function PI_LOJA_X(aPrd, oHead, cCli, cLoja, cSer, cTab, cCond)
 	Private __cBatch       := "1"
 	Private __cXEvento     := "LOJ"
 
-	// Gera numero do orcamento/venda
 	cNumVen := GetSxeNum("SL1", "L1_NUM")
 
-	// --- CABECALHO (aCab) ---
 	AAdd(aCab, {"L1_FILIAL",  xFilial("SL1"),                                  Nil})
 	AAdd(aCab, {"L1_NUM",     PadR(cNumVen, TamSx3("L1_NUM")[1]),               Nil})
 	AAdd(aCab, {"L1_CLIENTE", PadR(cCli, TamSx3("L1_CLIENTE")[1]),              Nil})
@@ -1306,7 +1148,6 @@ User Function PI_LOJA_X(aPrd, oHead, cCli, cLoja, cSer, cTab, cCond)
 	AAdd(aCab, {"L1_PDV",     PadR("001", TamSx3("L1_PDV")[1]),                 Nil})
 	AAdd(aCab, {"L1_OPERADO", PadR(U_PI_STR_X(oHead, 'cod_LoginEmissao'), TamSx3("L1_OPERADO")[1]), Nil})
 
-	// --- ITENS (aItem) ---
 	For nI := 1 To Len(aPrd)
 		aLin := {}
 		AAdd(aLin, {"LR_FILIAL",  xFilial("SLR"),                                              Nil})
@@ -1323,7 +1164,6 @@ User Function PI_LOJA_X(aPrd, oHead, cCli, cLoja, cSer, cTab, cCond)
 		AAdd(aItem, aLin)
 	Next nI
 
-	// --- PARCELAS (aParcelas) ---
 	If oHead:HasProperty('recebimentos')
 		xRecVal := oHead['recebimentos']
 		If ValType(xRecVal) == "A"
@@ -1343,7 +1183,6 @@ User Function PI_LOJA_X(aPrd, oHead, cCli, cLoja, cSer, cTab, cCond)
 		})
 	Next nX
 
-	// --- EXECUTA LOJA701 (parametro 3 = inclusao de orcamento — NAO finaliza venda) ---
 	MSExecAuto({|a,b,c,d,e,f,g,h| LOJA701(a,b,c,d,e,f,g,h)}, .F., 3, aCab, aItem, aParcelas, Nil, Nil)
 
 	If lMsErroAuto

@@ -3,16 +3,9 @@
 #Include 'TopConn.ch'
 #Include 'RestFul.ch'
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Antonio Nunes O Jr / Jose Carlos - Artiq                            |
-| Data: 07/2026                                                              |
-| Descritivo: FATPI01D - Motor de Devolucao                                 |
-|             PI_DEVOL_X   - MATA103 tipo D/N (Devolucao de venda)          |
-|             FZ_VALID_DEV - Valida nota de origem na SF2                   |
-+----------------------------------------------------------------------------+
-*/
+// Motor de devolucao (NFe tipo D/N) - gera a nota via MATA103 e ajusta titulos (SE2)
 
+// Monta cabecalho/itens e dispara MATA103 (devolucao), depois ajusta parcelas em SE2
 User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval, cCond)
 	Local aRet       := {.F.,""}
 	Local aCab       := {}
@@ -20,8 +13,6 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 	Local aLin       := {}
 	Local nI         := 0
 	Local cTE        := ""
-//	Local nQtd       := 0
-//	Local nPrc       := 0
 	Local cProdKey   := ""
 	Local cCta       := ""
 	Local cCC        := ""
@@ -57,10 +48,8 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 	Local cDocPad    := PadL(AllTrim(cValToChar(cDoc)), TamSx3("F1_DOC")[1], "0")
 	Local cSerPad    := PadR(AllTrim(cValToChar(cSer)), TamSx3("F1_SERIE")[1], " ")
 	Local cCliPad    := PadR(AllTrim(cValToChar(cCli)), TamSx3("F1_FORNECE")[1], " ")
-//	Local cLojaPad   := PadR(AllTrim(cValToChar(cLoja)), TamSx3("F1_LOJA")[1], " ")
 	Local cItemSeq   := ""
 
-	// Financeiro/Banco JSON
 	Local cEvtMod    := U_PI_STR_X(oHead, "cod_EventoModalidade", "cod_Evento")
 	Local cNatJson   := U_PI_STR_X(oHead, "cod_NaturezaFinanceira")
 	Local cTransacao := U_PI_STR_X(oHead, "num_Transacao")
@@ -85,7 +74,6 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 	Local aEmpFil
 	Local dDataDigit
 
-	// INTELIGENCIA PROTHEUS: Se for SA2 (Fornecedor), forca TIPO 'N' para nao bugar o MATA103
 	Local cTipoDoc   := IIf(cTab == "SA2", "N", "D")
 	Local cOldPcNfe  := SuperGetMv("MV_PCNFE", .F., "2")
 
@@ -146,7 +134,6 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 		cNatReal := PadR(U_PI_NAT_X(cFornSql, cLojaSql, oHead), TamSx3("E2_NATUREZ")[1])
 	EndIf
 
-	// ---> TIPO DOC DINAMICO APLICADO AQUI <---
 	AAdd(aCab, {"F1_TIPO", cTipoDoc, Nil})
 	AAdd(aCab, {"F1_DOC", PadR(cValToChar(cDoc), 9), Nil})
 	AAdd(aCab, {"F1_SERIE", PadR(cValToChar(cSer), 3), Nil})
@@ -180,7 +167,6 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 		nQtdItm     := Max(U_PI_VAL_X(aPrd[nI], 'qtd_Produto'), 1)
 		nVlrUniItm  := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario')
 
-		// MULTIPLICANDO O DESCONTO PELA QUANTIDADE (CORRIGIDO PARA USO DE nI)
 		nDescItm    := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtdItm, 2)
 
 		nVlrBrutItm := Round(nQtdItm * nVlrUniItm, 2)
@@ -193,10 +179,6 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 		If Empty(cCC)
 			cCC := U_PI_CCUSTO_X(cProdKey)
 		EndIf
-
-        /*cNfOri   := PadR(U_PI_STR_X(aPrd[nI], '_NFORI', 'num_NFOri'), TamSx3("D1_NFORI")[1]) 
-        cSerOri  := PadR(U_PI_STR_X(aPrd[nI], '_SERIORI', 'num_SerOri'), TamSx3("D1_SERIORI")[1]) 
-        cItemOri := PadR(U_PI_STR_X(aPrd[nI], '_ITEMORI', 'num_ItemOri'), TamSx3("D1_ITEMORI")[1])*/
 
         cNotaOri := PadL(U_PI_STR_X(aPrd[nI], 'num_NFOrigem'), 9, '0')
         cSerieOri := U_PI_STR_X(aPrd[nI], 'cod_SerieOrigem')
@@ -213,69 +195,66 @@ User Function PI_DEVOL_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 
         aLin := {}
         AAdd(aLin, {"D1_FILIAL", xFilial("SD1"), Nil})
-        AAdd(aLin, {"D1_ITEM", cItemSeq, Nil}) 
-        AAdd(aLin, {"D1_COD", cProdKey, Nil}) 
-        AAdd(aLin, {"D1_UM", cUm, Nil}) 
-        AAdd(aLin, {"D1_QUANT", nQtdItm, Nil}) 
-        AAdd(aLin, {"D1_VUNIT", nVlrUniItm, Nil}) 
-        AAdd(aLin, {"D1_TOTAL", Round(nQtdItm * nVlrUniItm, 2), Nil}) 
-        AAdd(aLin, {"D1_VLDESC", nDescItm, Nil}) 
-        AAdd(aLin, {"D1_TES", cTE, Nil}) 
-        AAdd(aLin, {"D1_CONTA", cCta, Nil}) 
-        AAdd(aLin, {"D1_OPER", cOper, Nil}) 
-        AAdd(aLin, {"D1_CC", PadR(cCC, TamSx3("D1_CC")[1]), Nil}) 
-        AAdd(aLin, {"D1_CF", PadR(cValToChar(aPrd[nI]['cod_ProdutoCFOP']), TamSx3("D1_CF")[1]), Nil}) 
+        AAdd(aLin, {"D1_ITEM", cItemSeq, Nil})
+        AAdd(aLin, {"D1_COD", cProdKey, Nil})
+        AAdd(aLin, {"D1_UM", cUm, Nil})
+        AAdd(aLin, {"D1_QUANT", nQtdItm, Nil})
+        AAdd(aLin, {"D1_VUNIT", nVlrUniItm, Nil})
+        AAdd(aLin, {"D1_TOTAL", Round(nQtdItm * nVlrUniItm, 2), Nil})
+        AAdd(aLin, {"D1_VLDESC", nDescItm, Nil})
+        AAdd(aLin, {"D1_TES", cTE, Nil})
+        AAdd(aLin, {"D1_CONTA", cCta, Nil})
+        AAdd(aLin, {"D1_OPER", cOper, Nil})
+        AAdd(aLin, {"D1_CC", PadR(cCC, TamSx3("D1_CC")[1]), Nil})
+        AAdd(aLin, {"D1_CF", PadR(cValToChar(aPrd[nI]['cod_ProdutoCFOP']), TamSx3("D1_CF")[1]), Nil})
         AAdd(aLin, {"D1_LOCAL", PadR(cValToChar(U_PI_LOCAL_X(cProdKey)), 2), Nil})
-        AAdd(aLin, {"D1_NFORI", cNotaOri, Nil}) 
-        AAdd(aLin, {"D1_SERIORI", PADR(ALLTRIM(cSerieOri), nTamSerie, ''), Nil}) 
-        AAdd(aLin, {"D1_ITEMORI", PadL(ALLTRIM(cItemOri), nTamItemOri, '0') , Nil}) 
-        
+        AAdd(aLin, {"D1_NFORI", cNotaOri, Nil})
+        AAdd(aLin, {"D1_SERIORI", PADR(ALLTRIM(cSerieOri), nTamSerie, ''), Nil})
+        AAdd(aLin, {"D1_ITEMORI", PadL(ALLTRIM(cItemOri), nTamItemOri, '0') , Nil})
+
         AAdd(aIt, aLin)
     Next nI
 
     If oHead:HasProperty('parcelas')
-        xParcVal := oHead['parcelas'] 
-        If ValType(xParcVal) == "A" 
-            aParcJson := xParcVal 
+        xParcVal := oHead['parcelas']
+        If ValType(xParcVal) == "A"
+            aParcJson := xParcVal
         Else
-            If xParcVal != Nil 
-                aParcJson := { xParcVal } 
+            If xParcVal != Nil
+                aParcJson := { xParcVal }
             EndIf
         EndIf
     EndIf
 
     If Len(aParcJson) > 0
         For nX := 1 To Len(aParcJson)
-            oParcItem := aParcJson[nX] 
-            cNumP := cValToChar(U_PI_VAL_X(oParcItem, 'num_Parcela')) 
-            dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_ParcelaVencimento')) 
+            oParcItem := aParcJson[nX]
+            cNumP := cValToChar(U_PI_VAL_X(oParcItem, 'num_Parcela'))
+            dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_ParcelaVencimento'))
             nVlrP := U_PI_VAL_X(oParcItem, 'vlr_Parcela')
-            
-            If Empty(cNumP) .Or. cNumP == "0" 
-                cNumP := cValToChar(nX) 
+
+            If Empty(cNumP) .Or. cNumP == "0"
+                cNumP := cValToChar(nX)
             EndIf
-            
-            If Empty(dVencP) 
-                dVencP := dEmissao 
+
+            If Empty(dVencP)
+                dVencP := dEmissao
             EndIf
-            
+
             AAdd(aParcLegacy, {cNumP, dVencP, nVlrP})
         Next nX
     Else
-        If nVlrBrut > 0 
-            AAdd(aParcLegacy, {"1", dEmissao, nVlrBrut}) 
+        If nVlrBrut > 0
+            AAdd(aParcLegacy, {"1", dEmissao, nVlrBrut})
         EndIf
     EndIf
 
-    // Desliga a trava de Pedido de Compras para permitir a Devolucao SA2 passar como Entrada
     PutMv("MV_PCNFE", "2")
 
 If lDevol
-    // Motor roda com o tipo dinamico ('N' ou 'D')
     aEx := U_PI_EXE103_X(aCab, aIt, cTipoDoc)
 
 
-    // Restaura a trava de sistema
     PutMv("MV_PCNFE", cOldPcNfe)
 
     If aEx[1]
@@ -288,65 +267,65 @@ If lDevol
         Else
             cNatReal := PadR(U_PI_NAT_X(cCli, cLoja, oHead), TamSx3("E2_NATUREZ")[1])
         EndIf
-        
+
         cHistPad := "API: Orig:" + U_PI_STR_X(oHead, "des_Origem") + " Aut:" + U_PI_STR_X(oHead, "des_Autorizacao") + " Trans:" + cTransacao
 
         If Len(aParcLegacy) > 0
-            cAliSE2 := GetNextAlias() 
-            cQrySE2 := "SELECT R_E_C_N_O_ AS REC, E2_FILIAL FROM " + RetSqlName("SE2") + " WHERE E2_NUM = '" + cDocPad + "' AND E2_FORNECE = '" + cCliPad + "' AND D_E_L_E_T_ = ' ' ORDER BY E2_PARCELA" 
+            cAliSE2 := GetNextAlias()
+            cQrySE2 := "SELECT R_E_C_N_O_ AS REC, E2_FILIAL FROM " + RetSqlName("SE2") + " WHERE E2_NUM = '" + cDocPad + "' AND E2_FORNECE = '" + cCliPad + "' AND D_E_L_E_T_ = ' ' ORDER BY E2_PARCELA"
             MpSysOpenQuery(cQrySE2, cAliSE2)
-            
+
             nX := 1
             While (cAliSE2)->(!Eof()) .And. nX <= Len(aParcLegacy)
-                nRecSE2 := (cAliSE2)->REC 
-                If ValType(nRecSE2) == "C" 
-                    nRecSE2 := Val(nRecSE2) 
+                nRecSE2 := (cAliSE2)->REC
+                If ValType(nRecSE2) == "C"
+                    nRecSE2 := Val(nRecSE2)
                 EndIf
-                
-                SE2->(DbGoTo(nRecSE2)) 
+
+                SE2->(DbGoTo(nRecSE2))
                 If RecLock("SE2", .F.)
                     SE2->E2_PARCELA := PadR(aParcLegacy[nX][1], TamSx3("E2_PARCELA")[1])
-                    SE2->E2_VENCTO  := aParcLegacy[nX][2] 
-                    SE2->E2_VENCREA := aParcLegacy[nX][2] 
-                    
-                    If SE2->(FieldPos("E2_VALOR")) > 0 
-                        SE2->E2_VALOR := aParcLegacy[nX][3] 
+                    SE2->E2_VENCTO  := aParcLegacy[nX][2]
+                    SE2->E2_VENCREA := aParcLegacy[nX][2]
+
+                    If SE2->(FieldPos("E2_VALOR")) > 0
+                        SE2->E2_VALOR := aParcLegacy[nX][3]
                     EndIf
-                    If SE2->(FieldPos("E2_SALDO")) > 0 
-                        SE2->E2_SALDO := aParcLegacy[nX][3] 
+                    If SE2->(FieldPos("E2_SALDO")) > 0
+                        SE2->E2_SALDO := aParcLegacy[nX][3]
                     EndIf
-                    If SE2->(FieldPos("E2_COND")) > 0 
-                        SE2->E2_COND := cCondReal 
+                    If SE2->(FieldPos("E2_COND")) > 0
+                        SE2->E2_COND := cCondReal
                     EndIf
-                    If SE2->(FieldPos("E2_NATUREZ")) > 0 
-                        SE2->E2_NATUREZ := cNatReal 
+                    If SE2->(FieldPos("E2_NATUREZ")) > 0
+                        SE2->E2_NATUREZ := cNatReal
                     EndIf
-                    If SE2->(FieldPos("E2_NOMFOR")) > 0 
-                        SE2->E2_NOMFOR := PadR(Left(cNomeFin, TamSx3("E2_NOMFOR")[1]), TamSx3("E2_NOMFOR")[1]) 
+                    If SE2->(FieldPos("E2_NOMFOR")) > 0
+                        SE2->E2_NOMFOR := PadR(Left(cNomeFin, TamSx3("E2_NOMFOR")[1]), TamSx3("E2_NOMFOR")[1])
                     EndIf
-                    If SE2->(FieldPos("E2_HIST")) > 0 
-                        SE2->E2_HIST := Left(cHistPad, TamSx3("E2_HIST")[1]) 
+                    If SE2->(FieldPos("E2_HIST")) > 0
+                        SE2->E2_HIST := Left(cHistPad, TamSx3("E2_HIST")[1])
                     EndIf
-                    If SE2->(FieldPos("E2_XEVENTO")) > 0 
+                    If SE2->(FieldPos("E2_XEVENTO")) > 0
                         SE2->E2_XEVENTO := PadR(cEvtMod, TamSx3("E2_XEVENTO")[1])
                     EndIf
-                    
+
                     SE2->(MsUnlock())
                 EndIf
-                
-                nX++ 
+
+                nX++
                 (cAliSE2)->(DbSkip())
             EndDo
 
             While (cAliSE2)->(!Eof())
-                nRecSE2 := (cAliSE2)->REC 
-                If ValType(nRecSE2) == "C" 
-                    nRecSE2 := Val(nRecSE2) 
+                nRecSE2 := (cAliSE2)->REC
+                If ValType(nRecSE2) == "C"
+                    nRecSE2 := Val(nRecSE2)
                 EndIf
-                SE2->(DbGoTo(nRecSE2)) 
-                If RecLock("SE2", .F.) 
-                    SE2->(DbDelete()) 
-                    SE2->(MsUnlock()) 
+                SE2->(DbGoTo(nRecSE2))
+                If RecLock("SE2", .F.)
+                    SE2->(DbDelete())
+                    SE2->(MsUnlock())
                 EndIf
                 (cAliSE2)->(DbSkip())
             EndDo
@@ -356,33 +335,11 @@ If lDevol
         aRet := {.F., aEx[2], .F.}
     EndIf
 Else
-	// [FIX-ORA01465] Jose Carlos - Artiq - 08/2026
-	// "nao" sem acento - mesmo fix de FATPI01S.prw ("não" UTF-8 causava
-	// ORA-01465 no TCSqlExec de U_UPDSTAT ao gravar essa mensagem em
-	// ZZB_ERRMSG).
 	aRet := {.F., "(MATA103) Nota de origem nao existe na SF2. Favor verificar.",.T.}
 Endif
 Return aRet
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Antonio Nunes O Jr | Data: 18/04/2026                               |
-| Descritivo: Funcao de Apoio (Extracao Anti-Leak JsonObject em Escadinha)   |
-+----------------------------------------------------------------------------+
-*/
-// [FIX-LOTE-COMPILACAO] Jose Carlos - Artiq - 08/2026
-// Promovida de Static Function pra User Function - mesmo problema achado
-// e corrigido em RetOpera (FATPI01S.prw -> FATPI01D.prw/E.prw), so na
-// direcao contraria aqui: FATPI01S.prw chama FZ_VALID_DEV(cChaveOri,
-// cNotaOri,'C') dentro de U_PI_SAIDA_X (linha ~934, caminho real -
-// devolucao referenciada numa nota de Saida), mas so existia definicao
-// Static local aqui em FATPI01D.prw (lote de compilacao diferente).
-// Nunca reportado em teste porque exige cTipoOper=='D' com cNotaOri
-// preenchido - caminho menos comum, mas alcancavel em producao. Chamador
-// em FATPI01S.prw atualizado de FZ_VALID_DEV(...) pra U_FZ_VALID_DEV(...);
-// chamada local aqui embaixo tambem atualizada por consistencia (mesmo
-// padrao ja usado em todo o codebase - U_UPDSTAT etc. chamados com
-// prefixo U_ mesmo de dentro do proprio arquivo que os define).
+// Confirma se uma nota de origem (por chave/numero) realmente existe em SF1 (compra) ou SF2 (venda)
 User Function FZ_VALID_DEV(cChave,cNota,cTipo)
 
 	Local cNewSF1 := GetNextAlias()
@@ -395,10 +352,10 @@ User Function FZ_VALID_DEV(cChave,cNota,cTipo)
         select
 			SF1.F1_DOC
         from
-            %table:SF1% SF1	                     
+            %table:SF1% SF1
         where
 			SF1.%notDel%
-			AND TRIM(SF1.F1_CHVNFE) = %exp:(ALLTRIM(cChave))% 
+			AND TRIM(SF1.F1_CHVNFE) = %exp:(ALLTRIM(cChave))%
 		EndSQL
 
 		(cNewSF1)->(dbGoTop())
@@ -416,10 +373,10 @@ User Function FZ_VALID_DEV(cChave,cNota,cTipo)
         select
 			SF2.F2_DOC
         from
-            %table:SF2% SF2	                     
+            %table:SF2% SF2
         where
 			SF2.%notDel%
-			AND TRIM(SF2.F2_CHVNFE) = %exp:(ALLTRIM(cChave))% 
+			AND TRIM(SF2.F2_CHVNFE) = %exp:(ALLTRIM(cChave))%
 		EndSQL
 
 		(cNewSF2)->(dbGoTop())
@@ -435,8 +392,3 @@ User Function FZ_VALID_DEV(cChave,cNota,cTipo)
 
 
 Return lRet
-
-/*/{Protheus.doc} FATPI0804
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Recupera Empresa e Filial da SM0 via CNPJ formatado. 
-/*/

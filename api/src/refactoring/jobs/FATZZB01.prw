@@ -2,27 +2,12 @@
 #Include 'TbiConn.ch'
 #Include 'TopConn.ch'
 
-// [BOOTSTRAP] Empresa/filial padrao para o RpcSetEnv inicial do Job.
-// Nao da pra usar SuperGetMv aqui � SX6/cEmpAnt ainda nao existem antes
-// do primeiro RpcSetEnv (erro 'variable does not exist CFILANT'). Hardcode
-// e o padrao correto nesse bootstrap; isolado em #Define para ficar facil
-// de achar/trocar se o ambiente mudar.
 Static CEMPPAD := "01"
 Static CFILPAD := "01001"
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Jose Carlos - Artiq                                                 |
-| Data: 07/2026                                                              |
-| Descritivo: FATZZB01 - Job Schedule - Fila ZZB (NFe Devolucao)            |
-|             Processa: cOper = D (Devolucao de Venda)                       |
-|             Motor: PI_DEVOL_X (MATA103 tipo D)                             |
-| [REV2] Jose Carlos - Artiq - 07/2026                                       |
-|   Job novo. Extraido do FATZZA01 (antes Saida e Devolucao processavam      |
-|   juntos na fila ZZA). Devolucao agora tem fila propria (ZZB).            |
-+----------------------------------------------------------------------------+
-*/
+// Job agendado - fila ZZB: processa NFe Devolucao (cOper=D) via MATA103
 
+// Le a fila ZZB e processa cada nota de devolucao (NFD)
 User Function FATZZB01()
     Local cAliZZB  := GetNextAlias()
     Local cQry     := ""
@@ -51,8 +36,6 @@ User Function FATZZB01()
 
     RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
 
-    // [FIX-MEMO] Nao seleciona ZZB_JSON aqui � le via R_E_C_N_O_ + DbGoto
-    // na area nativa, mais abaixo (mesmo fix aplicado no FATZZF01).
     cQry := "SELECT ZZB_COD, ZZB_CHVNFE, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZB") + " "
     cQry += "WHERE ZZB_STATUS IN ('P','A') AND ZZB_PRDPEN = 'N' "
     cQry += "AND ZZB_FILIAL = '" + xFilial("ZZB") + "' "
@@ -61,13 +44,6 @@ User Function FATZZB01()
 
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZB, .T., .T.)
 
-    // [FIX-ALIAS-EVICTION] Jose Carlos - Artiq - 08/2026
-    // Mesmo bug ja corrigido em FATZZD01.prw/FATZZA01.prw: cAliZZB
-    // (cursor TOPCONN) ficava aberto durante o loop inteiro, inclusive
-    // durante a chamada a ZZB_MotorDevolucao -> U_PI_DEVOL_X (MATA103) -
-    // motor nativo mexe pesado em work areas e pode evictar/reciclar o
-    // slot do cursor mais antigo ainda aberto. Corrigido materializando a
-    // fila inteira numa array ANTES de processar qualquer nota.
     While (cAliZZB)->(!Eof())
         aAdd(aFila, {AllTrim((cAliZZB)->ZZB_COD), AllTrim((cAliZZB)->ZZB_CHVNFE), (cAliZZB)->RECNO})
         (cAliZZB)->(DbSkip())
@@ -85,7 +61,6 @@ User Function FATZZB01()
         cMsgSuc := ""
         lOk     := .F.
 
-        // Reposiciona na area nativa ZZB so pra ler o memo certo
         DbSelectArea("ZZB")
         ZZB->(DbGoto(nRecno))
         cJson := ZZB->ZZB_JSON
@@ -95,10 +70,6 @@ User Function FATZZB01()
 
         jJson := JsonObject():New()
         If Empty(jJson:FromJson(cJson))
-            // [FIX-EXCEPTION-MOTOR] 08/2026 - Begin
-            // Sequence/Recover em volta do motor - excecao de runtime nao
-            // tratada vira erro normal em vez de derrubar o Job inteiro
-            // sem callback. Ver U_PI_ERRO_RT (FATZZF01.prw).
             bErrOld := ErrorBlock({|oErr| Break(oErr)})
             Begin Sequence
                 aRet := ZZB_MotorDevolucao(jJson)
@@ -111,11 +82,6 @@ User Function FATZZB01()
             If lOk
                 cFilCb := IIF(Len(aRet) >= 5, cValToChar(aRet[4]), "")
                 cDocCb := IIF(Len(aRet) >= 5, cValToChar(aRet[5]), "")
-                // [FIX-MSG-DUPLICIDADE] Jose Carlos - Artiq - 08/2026
-                // aRet[2] (mensagem descritiva do motor - inclui "Ja
-                // processada anteriormente: ..." no caso de duplicidade,
-                // pedido do iPaaS) antes se perdia aqui, nunca chegava no
-                // callback. Repassado como cMsgCustom (8o parametro).
                 cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else
                 cErrMsg := cValToChar(aRet[2])
@@ -142,6 +108,7 @@ User Function FATZZB01()
     RpcClearEnv()
 Return
 
+// Resolve numeracao e dispara U_PI_DEVOL_X (MATA103 tipo devolucao)
 Static Function ZZB_MotorDevolucao(jJson)
     Local aInv  := jJson['notas']
     Local oHead := Nil
@@ -164,11 +131,6 @@ Static Function ZZB_MotorDevolucao(jJson)
     If Len(aEmp) < 2 ; Return {.F., "Filial nao encontrada (ZZB/NFD)", cSub} ; EndIf
     If aEmp[1] != cEmpAnt .Or. aEmp[2] != cFilAnt ; RpcClearEnv() ; RpcSetEnv(aEmp[1], aEmp[2], Nil, Nil, "FAT") ; EndIf
 
-    // [MOVIDO-ZZ901] Jose Carlos - Artiq - 08/2026
-    // Numeracao migrou do classificador pra ca - ver
-    // instrucao_mover_numeracao_para_jobs.md. Devolucao usa SF1/F1_DOC.
-    // Preserva o desvio de numero pre-informado (num_NF/num_NotaFiscal/
-    // cod_ReciboVenda), mesmo comportamento de antes.
     nValNF := U_PI_VAL_X(oHead, 'num_NF', 'num_NotaFiscal')
     If nValNF == 0 ; nValNF := U_PI_VAL_X(oHead, 'cod_ReciboVenda') ; EndIf
     cNumInf := IIF(nValNF == 0, "", cValToChar(nValNF))
@@ -183,8 +145,6 @@ Static Function ZZB_MotorDevolucao(jJson)
     aRet := U_PI_DEVOL_X(aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_FIL')), 0, AllTrim(U_PI_STR_X(oHead,'_COND')))
 
     If aRet[1]
-        // [REV2-FIX] JSON_COMPRA agora e User Function (promovida em FATPI01E.prw),
-        // por isso pode ser chamada aqui sem redeclaracao local.
         U_JSON_COMPRA(cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_TAB')))
         Return {.T., "NFD: " + xFilial("SF1") + " - " + cValToChar(aRet[2]), cSub, xFilial("SF1"), cValToChar(aRet[2])}
     EndIf

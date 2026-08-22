@@ -4,15 +4,10 @@
 #Include 'RestFul.ch'
 #Include 'FWMVCDef.ch'
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Antonio Nunes O Jr / Jose Carlos - Artiq                            |
-| Data: 07/2026                                                              |
-| Descritivo: FATPI01U - Utilitarios Compartilhados                         |
-|             Compilar ANTES de todos os outros fontes FATPI01x              |
-+----------------------------------------------------------------------------+
-*/
+// Funcoes utilitarias compartilhadas pelos motores de NFe/NFCe (parse de
+// JSON, filial por CNPJ, numeracao, upsert de cliente/fornecedor, etc).
 
+// Executa MATA120 (pedido de compra) via ExecAuto
 User Function PI_EXE120_X(c,i)
     Local cM := ""
     Private INCLUI := .T.
@@ -21,13 +16,14 @@ User Function PI_EXE120_X(c,i)
     Private __cBatch := "1"
     Private cCadastro := "PC"
     MSExecAuto({|x,y,z| MATA120(x,y,z)},1,c,i)
-    If lMsErroAuto 
-        RollBackSx8() 
-        cM := U_PI_LOG_X("MATA120") 
-        Return {.F., cM} 
+    If lMsErroAuto
+        RollBackSx8()
+        cM := U_PI_LOG_X("MATA120")
+        Return {.F., cM}
     EndIf
 Return {.T., "OK"}
 
+// Executa MATA103 (nota fiscal de entrada/devolucao) via ExecAuto
 User Function PI_EXE103_X(c, i, cTipo)
     Local cM := ""
     Private INCLUI := .T.
@@ -38,24 +34,25 @@ User Function PI_EXE103_X(c, i, cTipo)
     MSExecAuto({|x, y, z| MATA103(x, y, z)}, c, i, 3)
     If lMsErroAuto
         RollBackSx8()
-        If cTipo == "D" 
-            cM := U_PI_LOG_X("MATA103_DEV") 
-        Else 
-            cM := U_PI_LOG_X("MATA103") 
+        If cTipo == "D"
+            cM := U_PI_LOG_X("MATA103_DEV")
+        Else
+            cM := U_PI_LOG_X("MATA103")
         EndIf
         Return {.F., cM}
     EndIf
 Return {.T., "OK"}
 
+// Le uma chave (ou uma chave alternativa) de um objeto JSON como string
 User Function PI_STR_X(o, k1, k2)
     Local x := ""
-    If o != Nil 
+    If o != Nil
         x := o[k1]
         If x == Nil .And. k2 != Nil
             x := o[k2]
         EndIf
     EndIf
-    
+
     If ValType(x) == "C"
         Return AllTrim(x)
     ElseIf ValType(x) == "N"
@@ -69,9 +66,10 @@ User Function PI_STR_X(o, k1, k2)
     EndIf
 Return ""
 
+// Le uma chave (ou uma chave alternativa) de um objeto JSON como numero
 User Function PI_VAL_X(o, k1, k2)
     Local x := 0
-    If o != Nil 
+    If o != Nil
         x := o[k1]
         If x == Nil .And. k2 != Nil
             x := o[k2]
@@ -85,33 +83,37 @@ User Function PI_VAL_X(o, k1, k2)
     EndIf
 Return 0
 
+// Remove pontuacao (., -, /) de um documento (CNPJ/CPF)
 User Function PI_LIMPA_X(c)
     Local cRet := StrTran(AllTrim(c), ".", "")
     cRet := StrTran(cRet, "-", "")
     cRet := StrTran(cRet, "/", "")
 Return cRet
 
+// Converte string de data (ISO) pra Date; vazio cai em dDataBase
 User Function PI_DATA_X(c)
-    If Empty(c) 
-        Return dDataBase 
+    If Empty(c)
+        Return dDataBase
     EndIf
     Return SToD(StrTran(SubStr(c, 1, 10), "-", ""))
 
+// Resolve empresa/filial (SM0) a partir do CNPJ
 User Function PI_FILIAL_X(cCgc)
     Local aRet := {}
     Local cAliasSM0 := GetNextAlias()
     Local cQuery := "SELECT M0_CODIGO, M0_CODFIL FROM " + RetSqlName("SM0") + " WHERE M0_CGC = '" + U_PI_LIMPA_X(cCgc) + "' AND D_E_L_E_T_ = ' '"
-    
+
     DbUseArea(.T., "TOPCONN", TcGenQry(,,cQuery), cAliasSM0, .T., .T.)
-    
+
     If (cAliasSM0)->(!Eof())
         AAdd(aRet, AllTrim((cAliasSM0)->M0_CODIGO))
         AAdd(aRet, AllTrim((cAliasSM0)->M0_CODFIL))
     EndIf
-    
+
     (cAliasSM0)->(DbCloseArea())
 Return aRet
 
+// Resolve cliente (SA1) ou fornecedor (SA2) por CNPJ/CPF
 User Function PI_BUSCA_X(cT, cK, cF, cC, cL, cFi)
     Local cA := GetNextAlias()
     Local cField := ""
@@ -124,18 +126,19 @@ User Function PI_BUSCA_X(cT, cK, cF, cC, cL, cFi)
         cField := "A2_CGC"
         cQ := "SELECT A2_COD AS COD, A2_LOJA AS LOJA FROM " + RetSqlName(cT) + " WHERE " + cField + " = '" + cK + "' AND D_E_L_E_T_ = ' '"
     EndIf
-    
+
     MpSysOpenQuery(cQ, cA)
-    
+
     If (cA)->(!Eof())
         cC := (cA)->COD
         cL := (cA)->LOJA
         cFi := cF
     EndIf
-    
+
     (cA)->(DbCloseArea())
 Return
 
+// Centro de custo padrao do produto (SB1), com fallback
 User Function PI_CCUSTO_X(cProd)
     Local cCust := Posicione("SB1", 1, xFilial("SB1") + PadR(cProd, TamSx3("B1_COD")[1]), "B1_CC")
     If Empty(cCust)
@@ -143,6 +146,7 @@ User Function PI_CCUSTO_X(cProd)
     EndIf
 Return cCust
 
+// Conta contabil do produto (SB1), com fallback via MV_XCCPAD
 User Function PI_CONTA_X(cProd)
     Local cConta := Posicione("SB1", 1, xFilial("SB1") + PadR(cProd, TamSx3("B1_COD")[1]), "B1_CONTA")
     If Empty(cConta)
@@ -150,6 +154,7 @@ User Function PI_CONTA_X(cProd)
     EndIf
 Return cConta
 
+// Armazem/local padrao do produto (SB1), com fallback
 User Function PI_LOCAL_X(cProd)
     Local cLoc := Posicione("SB1", 1, xFilial("SB1") + PadR(cProd, TamSx3("B1_COD")[1]), "B1_LOCPAD")
     If Empty(cLoc)
@@ -157,6 +162,7 @@ User Function PI_LOCAL_X(cProd)
     EndIf
 Return cLoc
 
+// Natureza de operacao do cliente (SA1), com fallback
 User Function PI_NAT_X(cCli, cLoja, oJson)
     Local cNat := Posicione("SA1", 1, xFilial("SA1") + cCli + cLoja, "A1_NATUREZ")
     If Empty(cNat)
@@ -164,6 +170,7 @@ User Function PI_NAT_X(cCli, cLoja, oJson)
     EndIf
 Return cNat
 
+// UF do cliente/fornecedor (SA1/SA2), com fallback
 User Function PI_UF_X(cTab, cCod, cLoja)
     Local cEst := "SP"
     DbSelectArea(cTab)
@@ -177,6 +184,7 @@ User Function PI_UF_X(cTab, cCod, cLoja)
     EndIf
 Return cEst
 
+// Grava a chave de acesso da NFe no cabecalho fiscal (SF2)
 User Function PI_CHVNFE_X(cDoc, cLeg, cSer, oHead, cPed)
     Local cChave := U_PI_STR_X(oHead, "cod_ChaveNFe")
     If Select("SF2") > 0
@@ -195,21 +203,27 @@ User Function PI_CHVNFE_X(cDoc, cLeg, cSer, oHead, cPed)
     EndIf
 Return
 
+// Ajustes finos de item antes do motor fiscal - hoje sem efeito (stub)
 User Function PI_FIXPROD(cProd, oItem)
 Return
 
+// Stub reservado
 Static Function FZ_FIX_TES(cTES)
 Return
 
+// Condicao de pagamento a usar - hoje repassa o valor recebido
 User Function PI_COND_X(c)
 Return c
 
+// Condicao de pagamento padrao (fallback)
 User Function PI_COND1_X()
 Return "001"
 
+// Ponto de ajuste de FCA no cabecalho antes do motor - hoje sem efeito (stub)
 User Function PI_SETFCA(cTab, cCod, cLoja, cCond, oHead)
 Return
 
+// Grava em disco o log de erro do ExecAuto (GetAutoGrLog)
 User Function PI_LOG_X(cRotina)
     Local cErrLog := ""
     Local aLogAut := GetAutoGrLog()
@@ -217,27 +231,25 @@ User Function PI_LOG_X(cRotina)
     Local nL      := 0
     Local cDt     := DToS(Date())
     Local cHr     := StrTran(Time(), ":", "-")
-    
-    cErrLog += "Rotina: " + cRotina + CRLF 
-    cErrLog += "Data/Hora: " + cDt + " " + cHr + CRLF 
+
+    cErrLog += "Rotina: " + cRotina + CRLF
+    cErrLog += "Data/Hora: " + cDt + " " + cHr + CRLF
     cErrLog += "--------------------------------------------------" + CRLF
-    
+
     If ValType(aLogAut) == "A"
-        For nL := 1 To Len(aLogAut) 
-            cErrLog += aLogAut[nL] + CRLF 
+        For nL := 1 To Len(aLogAut)
+            cErrLog += aLogAut[nL] + CRLF
         Next nL
     Else
         cErrLog += "Erro generico sem log detalhado do ExecAuto." + CRLF
     EndIf
-    
+
     cFile := "\system\FATPI01_" + cRotina + "_" + cDt + "_" + cHr + ".log"
-    MemoWrite(cFile, cErrLog) 
+    MemoWrite(cFile, cErrLog)
     ConOut("[TRAT_ERR] Log gravado em: " + cFile)
 Return cErrLog
 
-// ==========================================================================
-// INVERSAO DE PARZINHO DE CFOP (ESPELHAMENTO FISCAL)
-// ==========================================================================
+// Inverte o CFOP entre entrada (1/2/3) e saida (5/6/7) conforme a operacao
 User Function PI_INVCFOP(cCFOP, cOper)
     Local cRet := AllTrim(cCFOP)
 
@@ -261,12 +273,7 @@ User Function PI_INVCFOP(cCFOP, cOper)
 
 Return PadR(cRet, TamSx3("D1_CF")[1])
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Antonio Nunes O Jr | Data: 07/04/2026                               |
-| Descritivo: FATPI01NF - Auto-Entrada de Transferencia (CONVENIOS)          |
-+----------------------------------------------------------------------------+
-*/
+// Resolve empresa/filial (SM0) por CNPJ - usado no fluxo de transferencia/CONVENIOS
 User Function FATPIEMP(c)
 	Local aR := {}
 	Local cA := GetNextAlias()
@@ -282,6 +289,7 @@ User Function FATPIEMP(c)
 	(cA)->(DbCloseArea())
 Return aR
 
+// Valida existencia de CEST (F0G) ou NCM (SYD) no cadastro fiscal
 Static Function BuscaCad(cCad,nOpc)
 
 	Local lRet := .F.
@@ -305,18 +313,7 @@ Static Function BuscaCad(cCad,nOpc)
 
 Return lRet
 
-// ==========================================================================
-// MontaErroModel — GetErrorMessage() do MVC (FWModelAtributes) as vezes
-// devolve STRING (erro generico de model) e as vezes ARRAY DIRETO de 9
-// posicoes (erro de validacao de campo especifico - formato {tipo, id,
-// alias, campo, desc_campo, mensagem, solucao, ?, valor}, achado em
-// teste real via PI_CLI_X/A1_COD_MUN - conferido no debugger, uErro JA
-// E o array de 9 posicoes, sem aninhamento extra). Gravar esse array
-// direto em ZZ*_ERRMSG (esperado como string) quebra - essa funcao
-// extrai [4] (nome do campo) e [9] (valor que causou o erro) e monta
-// uma mensagem legivel; se ja vier string, so devolve como veio.
-// [ZZG] Jose Carlos - Artiq - 08/2026
-// ==========================================================================
+// Monta uma mensagem legivel a partir do retorno de oModel:GetErrorMessage() (string ou array de 9 posicoes)
 Static Function MontaErroModel(uErro)
 	Local cMsg   := ""
 	Local cCampo := ""
@@ -338,18 +335,7 @@ Static Function MontaErroModel(uErro)
 	EndIf
 Return cMsg
 
-// ==========================================================================
-// PI_CLI_X — Upsert de Cliente (CRMA980), extraida de FATPI06.prw (DoPost)
-// [ZZG] Jose Carlos - Artiq - 08/2026
-// Extraida pra ser chamada tanto pelo endpoint sincrono (FATPI06.prw, que
-// agora so faz parse+chamada) quanto pelo Job assincrono FATZZG01.prw
-// (cliente/fornecedor pendente, ver instrucao_zzg_cliente_fornecedor.md).
-// Retorno no mesmo formato de U_PI_PROD_X: {lOk, cMensagem, cCodProtheus}.
-// Logica de negocio (model CRMA980, validacao de duplicidade via
-// A1_LEGADO) e transcricao 1:1 do DoPost original - so trocou a fonte do
-// JSON (de oSelf:GetContent() pra parametro ja parseado) e a saida (de
-// oSelf:SetResponse pro array de retorno).
-// ==========================================================================
+// Upsert de cliente (SA1) via MVC - dedup por A1_LEGADO
 User Function PI_CLI_X(oJson)
     Local aRet       := {.F., "", ""}
     Local bErrBlock
@@ -373,13 +359,6 @@ User Function PI_CLI_X(oJson)
             cAliAux := GetNextAlias()
             MpSysOpenQuery(cQryAux, cAliAux)
             If (cAliAux)->(!Eof())
-                // [FIX-JA-CADASTRADO] Jose Carlos - Artiq - 08/2026
-                // Achado em teste real (19/08): cliente ja cadastrado
-                // retornava {.F., ...} - tratado como ERRO, o que travava a
-                // liberacao da pendencia (U_ZZPENDOK/U_ZZ_LIBNF so rodam no
-                // caminho lOk==.T. em FATZZG01.prw). Mas "ja cadastrado" nao
-                // e falha - o objetivo (cliente existir) ja foi atingido.
-                // Corrigido pra sucesso, devolvendo o A1_COD ja existente.
                 cProxCod := AllTrim((cAliAux)->A1_COD)
                 (cAliAux)->(DbCloseArea())
                 aRet := {.T., "Cliente ja cadastrado (mantido): " + cVLeg, cProxCod}
@@ -418,32 +397,15 @@ User Function PI_CLI_X(oJson)
         oSA1Mod:SetValue("A1_TEL"    , U_PI_STR_X(oJson, "telefone"))
         oSA1Mod:SetValue("A1_EMAIL"  , Lower(U_PI_STR_X(oJson, "email")))
         oSA1Mod:SetValue("A1_TIPO"   , "F")
-        // [FIX-SYNC-PICLI] Jose Carlos - Artiq - 08/2026
-        // A1_PESSOA fixo em "F" era divergente do FATPI06.prw ja corrigido
-        // contra payload real do iPaaS (Json tabela muro Cliente.txt) -
-        // ver instrucao_sync_pi_cli_forn.md, item 1.2. F/J por tamanho do
-        // documento (CPF 11 digitos / CNPJ 14).
         If Len(U_PI_STR_X(oJson, "cpf")) = 11
             oSA1Mod:SetValue("A1_PESSOA" , "F")
         ElseIf Len(U_PI_STR_X(oJson, "cpf")) = 14
             oSA1Mod:SetValue("A1_PESSOA" , "J")
         EndIf
         oSA1Mod:SetValue("A1_LEGADO" , cVLeg)
-        // [FIX-CLI-RH] Jose Carlos - Artiq - 08/2026
-        // Campos novos pedidos pelo time - cod_RH/tpo_Funcionario do JSON
-        // pra A1_XCODRH/A1_TPOFUNC (SA1).
         oSA1Mod:SetValue("A1_XCODRH" , U_PI_STR_X(oJson, "cod_RH"))
         oSA1Mod:SetValue("A1_TPOFUNC", U_PI_STR_X(oJson, "tpo_Funcionario"))
 
-        // [FIX-SYNC-PICLI] Jose Carlos - Artiq - 08/2026
-        // A1_COD_MUN sem default de cod_Municipio era divergente do
-        // FATPI06.prw ja corrigido - ver instrucao_sync_pi_cli_forn.md,
-        // item 1.1. Default primeiro, cod_mun sobrescreve se vier.
-        // [FIX-CODMUN] Jose Carlos - Artiq - 08/2026
-        // Chave de override era "cod_ibge", mas o payload real (fila ZZG,
-        // testado 19/08) manda "cod_mun" - "cod_ibge" nunca vinha, override
-        // nunca disparava, ficava so com cod_Municipio (que nao e um codigo
-        // IBGE valido). Corrigido pra ler a chave certa.
         oSA1Mod:SetValue("A1_COD_MUN", U_PI_STR_X(oJson, "cod_Municipio"))
 
         If !Empty(U_PI_STR_X(oJson, "cod_mun"))
@@ -479,19 +441,7 @@ User Function PI_CLI_X(oJson)
 
 Return aRet
 
-// ==========================================================================
-// PI_FORN_X — Upsert de Fornecedor (MATA020), extraida de FATPI03.PRW
-// (WSMETHOD POST NEW). [ZZG] Jose Carlos - Artiq - 08/2026
-// Processa UM fornecedor por chamada (nao o array/lote inteiro) - quem
-// itera multiplos itens e o chamador (endpoint FATPI03.prw, ou o Job
-// FATZZG01.prw pro fluxo assincrono). Retorno {lOk, cMensagem,
-// cCodProtheus}, mesmo formato de U_PI_PROD_X/U_PI_CLI_X. Logica do model
-// MATA020 (incluindo o bloco de dados bancarios) e transcricao 1:1 do
-// loop original (FATPI03.PRW, linhas 90-167) - nao tinha ErrorBlock/Begin
-// Sequence no original, mantido assim aqui tambem (excecao nao tratada
-// propaga pro chamador - mesmo risco ja documentado como pendencia geral
-// de tratamento de erro nos Jobs, nao resolvido so aqui).
-// ==========================================================================
+// Upsert de fornecedor (SA2) via MVC (MATA020) - insert ou update por CNPJ
 User Function PI_FORN_X(jItem)
     Local aRet      := {.F., "", ""}
     Local cCNPJ     := ""
@@ -537,10 +487,6 @@ User Function PI_FORN_X(jItem)
     oModel:SetValue("SA2MASTER", "A2_EST" , Upper(AllTrim(cValToChar(jItem["cod_UF"]))))
     oModel:SetValue("SA2MASTER", "A2_MUN" , Left(cMun, 30))
     oModel:SetValue("SA2MASTER", "A2_CEP" , StrTran(cValToChar(jItem["num_CEP"]), "-", ""))
-    // [FIX-SYNC-PIFORN] Jose Carlos - Artiq - 08/2026
-    // A2_COD_MUN/A2_CODPAIS ausentes - divergente do FATPI03.PRW ja
-    // corrigido contra payload real do iPaaS (Json tabela muro
-    // Fornecedor.txt) - ver instrucao_sync_pi_cli_forn.md, item 2.2.
     oModel:SetValue("SA2MASTER", "A2_COD_MUN", AllTrim(cValToChar(jItem["cod_IBGE"])))
     oModel:SetValue("SA2MASTER", "A2_CODPAIS", cValToChar(jItem["cod_pais"]))
 
@@ -550,10 +496,6 @@ User Function PI_FORN_X(jItem)
 
     oModel:SetValue("SA2MASTER", "A2_BANCO"  , cValToChar(jItem["cod_Banco"]))
     oModel:SetValue("SA2MASTER", "A2_AGENCIA", cValToChar(jItem["num_Agencia"]))
-    // [FIX-SYNC-PIFORN] Jose Carlos - Artiq - 08/2026
-    // A2_NUMCON lia num_ContaCorrente (campo errado) - divergente do
-    // FATPI03.PRW ja corrigido - ver instrucao_sync_pi_cli_forn.md, item
-    // 2.1. A2_DVCTA (digito) tambem ausente - item 2.2.
     oModel:SetValue("SA2MASTER", "A2_NUMCON" , cValToChar(jItem["num_Conta"]))
     oModel:SetValue("SA2MASTER", "A2_DVCTA"  , cValToChar(jItem["num_ContaDig"]))
 
@@ -576,49 +518,7 @@ User Function PI_FORN_X(jItem)
 
 Return aRet
 
-// ==========================================================================
-// PI_NUMERA_X — Numeracao de documento fiscal (SF2/F2_DOC ou SF1/F1_DOC),
-// extraida de ZZ901_Classifica (FATZZ901.prw).
-// [MOVIDO-ZZ901] Jose Carlos - Artiq - 08/2026
-// Bug que originou a mudanca: ZZ901_Classifica trocava de ambiente pra
-// resolver a filial real da nota (RpcSetEnv) e nunca voltava antes de
-// gravar via U_ZZX_Gravar (que usa xFilial(), refletindo a filial ja
-// trocada) - ZZA/ZZC gravavam com filial errada. Corrigido eliminando a
-// troca de ambiente do classificador por completo: SA1/SA2/SF4/SX5 sao
-// cadastro compartilhado entre filiais (confirmado - nao precisam de
-// RpcSetEnv na filial real), so numeracao (GetSxeNum/SX8, por filial) e
-// gravacao fiscal final realmente precisam. Os Jobs de destino
-// (FATZZA01/B01/C01) ja trocam de ambiente pra filial real antes de
-// chamar o motor fiscal - a numeracao move pra dentro desse trecho que ja
-// existia, chamando esta funcao. Ver instrucao_mover_numeracao_para_jobs.md.
-//
-// cTabFis: "SF2" (Saida/NFCe) ou "SF1" (Devolucao/Entrada).
-// cCampoDoc: "F2_DOC" ou "F1_DOC".
-// cNumInformado (opcional): quando a nota ja vem com numero no payload
-// (num_NF/num_NotaFiscal/cod_ReciboVenda - desvio que ja existia em
-// ZZ901_Classifica, preservado aqui), usa esse numero em vez de gerar via
-// GetSxeNum. Relevante principalmente pra Entrada (SF1/F1_DOC e o numero
-// real da nota do fornecedor, nao um numero que o Protheus inventa).
-//
-// Confere disponibilidade do numero gerado (loop com Soma1, mesmo padrao
-// que ja existia), confere duplicidade real (nota ja processada pra esse
-// cCod/cLoja/cSer - mesma query que existia dentro do ZZ901_Classifica) e
-// faz a limpeza SFT/SF3 (tambem movida de ZZ901_Classifica - so fazia
-// sentido junto do numero definitivo). Chamar ANTES de qualquer efeito
-// colateral fiscal do motor (nao so antes da gravacao final) - em
-// FATZZC01.prw isso significa antes de U_PI_GERAPC_X, nao so antes de
-// U_PI_GERANF_X: cLeg (parametro do GERAPC) e so referencia informativa
-// (C7_OBS/C7_LEGADO, confirmado nao afeta numeracao fiscal), mas se a
-// numeracao/duplicidade so fosse checada depois do GERAPC, uma nota
-// duplicada em retry criaria um pedido de compra (SC7) novo antes de ser
-// barrada - regressao em relacao ao comportamento original, onde a
-// duplicidade era checada antes de QUALQUER chamada de motor.
-//
-// Retorno: {lOk, cNF, lDuplicado}
-//   lOk == .T. e lDuplicado == .T. -> nota ja processada, cNF = numero ja
-//     existente (quem chama decide o que fazer - tratar como sucesso sem
-//     gravar de novo, nao como erro).
-// ==========================================================================
+// Gera/valida o numero fiscal (SX8), checando duplicidade e limpando SFT/SF3 orfaos
 User Function PI_NUMERA_X(cTabFis, cCampoDoc, cSer, cCod, cLoja, cNumInformado)
 	Local cNF          := ""
 	Local cQryAux      := ""
@@ -649,8 +549,6 @@ User Function PI_NUMERA_X(cTabFis, cCampoDoc, cSer, cCod, cLoja, cNumInformado)
 		cNF := PadL(AllTrim(cNF), TamSx3(cCampoDoc)[1], "0")
 	EndIf
 
-	// Duplicidade real - mesma query que existia dentro do ZZ901_Classifica,
-	// agora generica por SF2 (Saida/NFCe) ou SF1 (Devolucao/Entrada).
 	cQryAux := "SELECT " + cCampoDoc + " FROM " + RetSqlName(cTabFis) + " WHERE " + cCampoDoc + " = '" + cNF + "' AND " + cCampoSer + " = '" + cSer + "' AND " + cCampoCliFor + " = '" + cCod + "' AND " + cCampoLoja + " = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
 	cAliAux := GetNextAlias()
 	MpSysOpenQuery(cQryAux, cAliAux)
@@ -660,9 +558,6 @@ User Function PI_NUMERA_X(cTabFis, cCampoDoc, cSer, cCod, cLoja, cNumInformado)
 	EndIf
 	(cAliAux)->(DbCloseArea())
 
-	// [REV2-EXTRACAO-NFCE] Limpeza SFT/SF3 - movida de ZZ901_Classifica, so
-	// fazia sentido junto do numero definitivo (antes rodava logo apos a
-	// checagem de duplicidade, mesmo lugar relativo aqui).
 	cQryAux := "UPDATE " + RetSqlName("SFT") + " SET D_E_L_E_T_ = '*', R_E_C_D_E_L_ = R_E_C_N_O_ WHERE FT_NFISCAL = '" + cNF + "' AND FT_SERIE = '" + cSer + "' AND FT_CLIEFOR = '" + cCod + "' AND FT_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"
 	TCSqlExec(cQryAux)
 	cQryAux := "UPDATE " + RetSqlName("SF3") + " SET D_E_L_E_T_ = '*', R_E_C_D_E_L_ = R_E_C_N_O_ WHERE F3_NFISCAL = '" + cNF + "' AND F3_SERIE = '" + cSer + "' AND F3_CLIEFOR = '" + cCod + "' AND F3_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '"

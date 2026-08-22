@@ -2,63 +2,12 @@
 #Include 'TbiConn.ch'
 #Include 'TopConn.ch'
 
-// [BOOTSTRAP] Empresa/filial padrao para o RpcSetEnv inicial do Job.
-// Nao da pra usar SuperGetMv aqui � SX6/cEmpAnt ainda nao existem antes
-// do primeiro RpcSetEnv (erro 'variable does not exist CFILANT'). Hardcode
-// e o padrao correto nesse bootstrap; isolado em #Define para ficar facil
-// de achar/trocar se o ambiente mudar.
 Static CEMPPAD := "01"
 Static CFILPAD := "01001"
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Jose Carlos - Artiq                                                 |
-| Data: 07/2026                                                              |
-| Descritivo: FATZZD01 - Job Schedule - Fila ZZD (NFCe modelo 65)          |
-|             Motor: U_PI_SAIDA_X (Faturamento/MaNfs2Nfs � grava SF2/SD2,  |
-|             mesmo motor que FATZZA01 ja usa pra NFe Saida comum,         |
-|             definida em FATPI01S.prw. FATZZD01 depende do FATPI01S       |
-|             estar compilado/disponivel no RPO.)                          |
-| [REV2] Jose Carlos - Artiq - 07/2026                                       |
-|   Era FATZZC01 (fila ZZC). Deslizou uma letra porque NFe Devolucao ganhou |
-|   fila propria (ZZB), empurrando Entrada->ZZC e NFCe->ZZD.               |
-| [FIX-MOTOR] Jose Carlos - Artiq - 07/2026                                 |
-|   O motor estava chamando U_FATPI08NF (SEM FISCAL, do FATPI08) � errado,  |
-|   isso e o motor do Recibo. NFCe usa LOJA701 (U_PI_LOJA_X). Corrigido. |
-| [MOTOR-FATURAMENTO] Jose Carlos - Artiq - 08/2026 - DECISAO REVISTA       |
-|   O [FIX-MOTOR] acima mantinha LOJA701 (SL1/SIGALOJA) por decisao        |
-|   consciente, citando risco de recalculo fiscal indevido (NFCe ja        |
-|   autorizada pela SEFAZ com valores do PDV). Analise do legado           |
-|   (FATPI01__2_.prw, monolito pre-refatoracao que tratava NFe e NFCe      |
-|   juntos) mostrou que o padrao correto e NFCe morar no Faturamento       |
-|   (SF2/SD2), igual NFe, so marcada com F2_ESPECIE/F3_ESPECIE := "NFCE" - |
-|   nao em SL1/SIGALOJA. Motor trocado de U_PI_LOJA_X pra U_PI_SAIDA_X     |
-|   (o mesmo que FATZZA01 ja usa). O risco de recalculo fiscal continua    |
-|   existindo (aceito conscientemente, mesmo trade-off que ja existe pra   |
-|   NFe) - nao foi resolvido pela troca, passou a ser compartilhado com o  |
-|   mesmo motor que a NFe ja usa em producao. Ganhou numeracao/duplicidade |
-|   propria (F2_DOC via GetSxeNum) e validacao de serie (SX5), que nao     |
-|   eram necessarias com LOJA701 (gerava o proprio L1_NUM sozinho).        |
-| [REV2-SYNC-FIX] Jose Carlos - Artiq - 07/2026                             |
-|   Resolucao de cliente, numeracao e CFOP/TES foram movidas do FATPI09     |
-|   (endpoint) pra ca � o endpoint agora so valida/classifica/enfileira,    |
-|   sem depender de U_FATCFOP01 no caminho sincrono. Mesmo motivo do        |
-|   ajuste ja feito no FATPI01_V2 pra NFe: quem processa e o Job, nao o     |
-|   endpoint.                                                               |
-| [FIX-DUPLICIDADE] Jose Carlos - Artiq - 07/2026                          |
-|   Eu tinha reimplementado U_PI_LOJA_X aqui do zero (com base na doc   |
-|   generica da TOTVS), sem saber que ja existia uma versao completa e     |
-|   correta em FATPI01S.prw (SL1/L1_*, nao SLQ/LQ_* � tabela diferente da  |
-|   doc generica). Gerava duplicidade de User Function no RPO. Removida a  |
-|   minha versao daqui; a chamada agora usa a original (7 parametros, sem  |
-|   cNF � ela gera o proprio numero via GetSxeNum("SL1","L1_NUM")).        |
-| [FIX-10CHAR] Jose Carlos - Artiq - 07/2026                               |
-|   U_FZ_PROS_LOJA colidia com U_PI_SAIDA_X (AdvPL so considera os          |
-|   primeiros 10 chars do nome, incluindo o U_, na resolucao de simbolo).  |
-|   Renomeada para PI_LOJA_X em FATPI01S.prw. Chamada aqui atualizada.     |
-+----------------------------------------------------------------------------+
-*/
+// Job agendado - fila ZZD: processa NFCe (modelo 65) via U_PI_SAIDA_X (Faturamento)
 
+// Le a fila ZZD e processa cada nota NFCe
 User Function FATZZD01()
     Local cAliZZD  := GetNextAlias()
     Local cQry     := ""
@@ -84,10 +33,6 @@ User Function FATZZD01()
     Local nJ       := 0
     Local bErrOld  := Nil
     Local oErrRT   := Nil
-    // [TIMING] Jose Carlos - Artiq - 08/2026 - instrumentacao temporaria
-    // pra medir onde o tempo de processamento vai (~8s/nota observados em
-    // teste real) - tirar depois de ter os numeros, nao e pra ficar no
-    // codigo definitivo.
     Local nTIni    := 0
 
     Private __cBatch := "1"
@@ -96,20 +41,6 @@ User Function FATZZD01()
 
     RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
 
-    // [FIX-MEMO] Nao seleciona ZZD_JSON aqui � campo memo/CLOB nao atravessa
-    // resultset TOPCONN de forma confiavel. Le via R_E_C_N_O_ + DbGoto na
-    // area nativa, mais abaixo (mesmo fix aplicado no FATZZF01).
-    // [ZZG] Jose Carlos - Artiq - 08/2026
-    // ZZD_CLIPEN/ZZD_FORPEN = 'N' - mesmo mecanismo do PRDPEN e do ja usado
-    // na ZZ9, agora pra cliente/fornecedor pendente (ver
-    // instrucao_zzg_cliente_fornecedor.md). So o filtro entrou aqui - ao
-    // contrario de ZZ901_Classifica, ZZD_MotorNFCe NAO tem um ponto de
-    // "cliente nao encontrado" que falha (NFCe sempre cai num consumidor
-    // generico - cCliD "000001" - quando nao acha um especifico, nunca
-    // falha por isso). Entao nao ha [FIX-CLIFOR-PENDENTE] equivalente
-    // aqui dentro do motor - CLIPEN so e setado de fora (FATPI11, via
-    // cliente_Pendente na ingestao). ZZD_FORPEN na pratica fica sempre
-    // 'N' (NFCe e sempre venda, fornecedor pendente nao se aplica).
     cQry := "SELECT ZZD_COD, ZZD_CHVNFE, ZZD_FILIAL, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZD") + " "
     cQry += "WHERE ZZD_STATUS IN ('P','A') AND ZZD_PRDPEN = 'N' AND ZZD_CLIPEN = 'N' AND ZZD_FORPEN = 'N' "
     cQry += "AND ZZD_FILIAL = '" + xFilial("ZZD") + "' "
@@ -118,17 +49,6 @@ User Function FATZZD01()
 
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZD, .T., .T.)
 
-    // [FIX-ALIAS-EVICTION] Jose Carlos - Artiq - 08/2026
-    // Erro reproduzido em teste real: "Alias does not exist <alias>" no
-    // (cAliZZD)->(DbSkip()) logo apos processar a 1a nota. Causa: cAliZZD
-    // (cursor TOPCONN via GetNextAlias) ficava aberto durante o loop
-    // inteiro, inclusive durante a chamada a ZZD_MotorNFCe -> U_PI_SAIDA_X
-    // -> MaNfs2Nfs (FATPI01S.prw) - o motor nativo de faturamento mexe
-    // pesado em work areas internamente (SE1/SE5/SD1/SFT/SF3, motor de
-    // impostos etc.) e pode evictar/reciclar o slot do cursor mais antigo
-    // ainda aberto. Corrigido materializando a fila inteira numa array
-    // ANTES de processar qualquer nota - o cursor TOPCONN fecha logo
-    // depois de ler a fila, entao nao sobrevive a nenhuma chamada ao motor.
     While (cAliZZD)->(!Eof())
         aAdd(aFila, {AllTrim((cAliZZD)->ZZD_COD), AllTrim((cAliZZD)->ZZD_CHVNFE), AllTrim((cAliZZD)->ZZD_FILIAL), (cAliZZD)->RECNO})
         (cAliZZD)->(DbSkip())
@@ -149,7 +69,6 @@ User Function FATZZD01()
         cProdPend := ""
         lOk     := .F.
 
-        // Reposiciona na area nativa ZZD so pra ler o memo certo
         DbSelectArea("ZZD")
         ZZD->(DbGoto(nRecno))
         cJson := ZZD->ZZD_JSON
@@ -160,10 +79,6 @@ User Function FATZZD01()
         jJson := JsonObject():New()
         If Empty(jJson:FromJson(cJson))
             nTIni := Seconds()
-            // [FIX-EXCEPTION-MOTOR] 08/2026 - Begin
-            // Sequence/Recover em volta do motor - excecao de runtime nao
-            // tratada vira erro normal em vez de derrubar o Job inteiro
-            // sem callback. Ver U_PI_ERRO_RT (FATZZF01.prw).
             bErrOld := ErrorBlock({|oErr| Break(oErr)})
             Begin Sequence
                 aRet := ZZD_MotorNFCe(jJson)
@@ -177,18 +92,9 @@ User Function FATZZD01()
             If lOk
                 cFilCb := IIF(Len(aRet) >= 5, cValToChar(aRet[4]), "")
                 cDocCb := IIF(Len(aRet) >= 5, cValToChar(aRet[5]), "")
-                // [FIX-MSG-DUPLICIDADE] Jose Carlos - Artiq - 08/2026
-                // aRet[2] (mensagem descritiva do motor - inclui "Ja
-                // processada anteriormente: ..." no caso de duplicidade,
-                // pedido do iPaaS, vale igual pra NFCe) antes se perdia
-                // aqui. Repassado como cMsgCustom (8o parametro).
                 cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else
                 cErrMsg := cValToChar(aRet[2])
-                // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
-                // 4o elemento "PRD" (quando presente) + 5o elemento com o
-                // codigo legado do produto faltante - mesmo contrato de
-                // ZZ901_Classifica, ver [FIX-PROD-PENDENTE-CLASSIF] la.
                 cTipoPen  := IIF(Len(aRet) >= 4 .And. aRet[4] == "PRD", "PRD", "")
                 cProdPend := IIF(cTipoPen == "PRD" .And. Len(aRet) >= 5, cValToChar(aRet[5]), "")
             EndIf
@@ -205,13 +111,6 @@ User Function FATZZD01()
             nOk++
             ConOut("[FATZZD01] OK: " + cCod)
         ElseIf cTipoPen == "PRD"
-            // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
-            // Mesmo tratamento do ZZ901_Classifica (NFe) - produto nao
-            // cadastrado na hora da classificacao estaciona a nota em vez
-            // de falhar: grava na ZZF (U_ZZF_GRV) e marca ZZD_PRDPEN='S'.
-            // cFilOri capturada na query principal (ZZD_MotorNFCe pode
-            // trocar de ambiente mid-function - mesmo motivo do
-            // [FIX-DESTMU-FILIAL] ja usado em ZZ9). Sem callback pro iPaaS.
             U_UPDSTAT("ZZD", cCod, "P", "")
             U_ZZF_GRV(cChvNFe, "NFC", cProdPend, "")
             TCSqlExec("UPDATE " + RetSqlName("ZZD") + " SET ZZD_PRDPEN = 'S' WHERE ZZD_COD = '" + cCod + "' AND ZZD_FILIAL = '" + cFilOri + "' AND D_E_L_E_T_ = ' '")
@@ -231,15 +130,8 @@ User Function FATZZD01()
     RpcClearEnv()
 Return
 
-// ==========================================================================
-// ZZD_MotorNFCe � resolve cliente, numeracao, CFOP/TES e dispara U_PI_SAIDA_X
-// (Faturamento/MaNfs2Nfs � grava SF2/SD2, mesmo motor de FATZZA01/NFe Saida.
-// Ver [MOTOR-FATURAMENTO] no cabecalho do arquivo). Assume que produto ja
-// existe (endpoint FATPI09 ja represou na ZZF/ZZD-PRDPEND=S se faltasse algo
-// � so chega aqui com PRDPEND='N'). Mantido um fallback defensivo mesmo assim.
-// ==========================================================================
+// Resolve cliente/numeracao/CFOP e dispara U_PI_SAIDA_X (grava SF2/SD2, marcados como NFCE)
 Static Function ZZD_MotorNFCe(jJson)
-//    Local aInv         := {}
     Local oData        := Nil
     Local aEmp         := {}
     Local aRet         := {.F., ""}
@@ -269,7 +161,7 @@ Static Function ZZD_MotorNFCe(jJson)
     Local lCest        := .T.
     Local lNcm         := .T.
     Local aRetCfop     := {}
-    Local nTIni        := 0  // [TIMING] instrumentacao temporaria, ver FATZZD01()
+    Local nTIni        := 0
 
     If ValType(jJson['notas']) == "A" .And. Len(jJson['notas']) > 0
         oData := jJson['notas'][1]
@@ -283,7 +175,6 @@ Static Function ZZD_MotorNFCe(jJson)
     If Len(aEmp) < 2 ; Return {.F., "Filial nao encontrada (ZZD/NFCe)", cSub} ; EndIf
     If aEmp[1] != cEmpAnt .Or. aEmp[2] != cFilAnt ; RpcClearEnv() ; RpcSetEnv(aEmp[1], aEmp[2], Nil, Nil, "FAT") ; EndIf
 
-    // --- Resolucao de cliente (sempre consumidor/SA1, NFCe e so venda) ---
     dVencto := U_PI_DATA_X(U_PI_STR_X(oData, 'dta_Emissao', 'dta_Vencimento'))
     If !Empty(dVencto)
         dDataBase := dVencto
@@ -312,38 +203,18 @@ Static Function ZZD_MotorNFCe(jJson)
 
     U_PI_BUSCA_X(cTab, cCod, aEmp[2], @cCod, @cLoja, @cFil)
 
-    // --- Serie ---
     cSer := AllTrim(U_PI_STR_X(oData, 'cod_Serie', 'num_Serie'))
     If Empty(cSer)
         cSer := "1"
     EndIf
     cSer := PadR(cSer, TamSx3("F2_SERIE")[1], " ")
 
-    // --- NUMERACAO E DUPLICIDADE REAL (contra SF2) ---
-    // [MOTOR-FATURAMENTO] Jose Carlos - Artiq - 08/2026
-    // NFCe passou a morar no Faturamento (U_PI_SAIDA_X/SF2) igual NFe
-    // Saida - deixou de existir o numero proprio que LOJA701/
-    // GetSxeNum("SL1","L1_NUM") gerava sozinho.
-    // [CONSOLIDACAO-NUMERA] Jose Carlos - Artiq - 08/2026
-    // Numeracao propria (GetSxeNum + loop de disponibilidade + duplicidade)
-    // trocada por U_PI_NUMERA_X (FATPI01U.prw) - mesma funcao que
-    // FATZZA01/B01/C01 agora usam (ver
-    // instrucao_mover_numeracao_para_jobs.md/_2.md, Parte 4 - consolidacao
-    // oportuna, nao bloqueante, feita nesta rodada por estarmos mexendo
-    // aqui de qualquer jeito). Ganha de brinde a limpeza SFT/SF3 que este
-    // motor nunca teve (FATZZA01/NFe Saida ja tinha). Mensagem de
-    // duplicidade padronizada pro mesmo formato usado pelas outras filas
-    // ("Ja processada anteriormente: " + cNF) - pedido do iPaaS de
-    // mensagem explicita vale igual pra NFCe, nao so NFe.
     nValNF := U_PI_VAL_X(oData, 'num_NF', 'num_NotaFiscal')
     aNum := U_PI_NUMERA_X("SF2", "F2_DOC", cSer, cCod, cLoja, IIF(nValNF == 0, "", cValToChar(nValNF)))
     If !aNum[1] ; Return {.F., "NUMERACAO: " + cValToChar(aNum[2]), cSub} ; EndIf
     If aNum[3] ; Return {.T., "Ja processada anteriormente: " + cValToChar(aNum[2]), cSub, xFilial("SF2"), cValToChar(aNum[2])} ; EndIf
     cNF := cValToChar(aNum[2])
 
-    // Validacao previa de serie (SX5) - mesma protecao que a NFe ja tem
-    // (ZZ901_Classifica, bloco cOper == "S") contra o erro fatal do
-    // Protheus "Problema Numeracao NF" quando a serie nao esta cadastrada.
     cQryAux := "SELECT X5_CHAVE FROM " + RetSqlName("SX5") + " WHERE X5_FILIAL = '" + xFilial("SX5") + "' AND X5_TABELA = '01' AND X5_CHAVE = '" + cSer + "' AND D_E_L_E_T_ = ' '"
     cAliAux := GetNextAlias()
     MpSysOpenQuery(cQryAux, cAliAux)
@@ -353,7 +224,6 @@ Static Function ZZD_MotorNFCe(jJson)
     EndIf
     (cAliAux)->(DbCloseArea())
 
-    // --- Resolucao de produto / CFOP / TES ---
     For nI := 1 To Len(aPrd)
         cProdLeg := AllTrim(U_PI_STR_X(aPrd[nI], 'cod_Produto'))
         cProdInt := ""
@@ -385,13 +255,6 @@ Static Function ZZD_MotorNFCe(jJson)
         EndIf
 
         If Empty(cProdInt)
-            // [FIX-PROD-PENDENTE-CLASSIF] Jose Carlos - Artiq - 08/2026
-            // Endpoint deveria ter garantido existencia via PRDPEND='N',
-            // mas a deteccao upfront do iPaaS pode falhar/ficar
-            // desatualizada (mesmo raciocinio do ZZ901_Classifica, ver
-            // [FIX-PROD-PENDENTE-CLASSIF] la) - alinhado com o time iPaaS:
-            // estaciona em vez de falhar (5o elemento "PRD" + 6o com o
-            // codigo legado do produto faltante).
             Return {.F., "Produto nao cadastrado (Item " + cValToChar(nI) + ") Legado: " + cProdLeg, cSub, "PRD", cProdLeg}
         EndIf
 
@@ -432,13 +295,6 @@ Static Function ZZD_MotorNFCe(jJson)
         EndIf
     Next nI
 
-    // --- Disparo do motor (Faturamento - MaNfs2Nfs, mesmo motor da NFe Saida) ---
-    // [MOTOR-FATURAMENTO] Jose Carlos - Artiq - 08/2026
-    // cLeg/cFil/cSerNF/cLegT sao parametros mortos de U_PI_SAIDA_X (nunca
-    // lidos dentro da funcao - conferido direto no fonte, FATPI01S.prw
-    // linha 641), vao vazios sem risco. .F. no lugar de lIsTransf porque
-    // NFCe nao tem fluxo de transferencia/CONVENIOS (exclusivo de NFe
-    // Saida comum).
     U_PI_SETFCA(cTab, cCod, cLoja, cCondSafe, oData)
 
     nTIni := Seconds()
@@ -449,10 +305,6 @@ Static Function ZZD_MotorNFCe(jJson)
         Return {.F., "MANFS2NFS: " + cValToChar(aRet[2]), cSub}
     EndIf
 
-    // [MOTOR-FATURAMENTO] U_PI_SAIDA_X so grava F2_ESPECIE/F3_ESPECIE como
-    // "SPED" ou "NFE" (nunca "NFCE") - patch pos-gravacao pra marcar
-    // corretamente, igual o legado (FATPI01__2_.prw, linhas 1873-1879/
-    // 2110-2122 e 2940-2946/3019) ja fazia pra modelo 65.
     TCSqlExec("UPDATE " + RetSqlName("SF2") + " SET F2_ESPECIE = '" + PadR("NFCE", TamSx3("F2_ESPECIE")[1]) + "' WHERE F2_DOC = '" + PadL(AllTrim(cValToChar(aRet[2])), TamSx3("F2_DOC")[1], "0") + "' AND F2_SERIE = '" + cSer + "' AND F2_CLIENTE = '" + cCod + "' AND F2_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '")
     TCSqlExec("UPDATE " + RetSqlName("SF3") + " SET F3_ESPECIE = '" + PadR("NFCE", TamSx3("F3_ESPECIE")[1]) + "' WHERE F3_NFISCAL = '" + PadL(AllTrim(cValToChar(aRet[2])), TamSx3("F2_DOC")[1], "0") + "' AND F3_SERIE = '" + cSer + "' AND F3_CLIEFOR = '" + cCod + "' AND F3_LOJA = '" + cLoja + "' AND D_E_L_E_T_ = ' '")
 

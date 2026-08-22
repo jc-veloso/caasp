@@ -3,18 +3,9 @@
 #Include 'TopConn.ch'
 #Include 'RestFul.ch'
 
-/*
-+----------------------------------------------------------------------------+
-| Autor: Antonio Nunes O Jr / Jose Carlos - Artiq                            |
-| Data: 07/2026                                                              |
-| Descritivo: FATPI01E - Motor de Entrada (Compras)                         |
-|             PI_GERAPC_X   - MATA120 (Pedido de Compra)                      |
-|             PI_GERANF_X   - MATA103 (Classificacao NF Entrada)              |
-|             JSON_COMPRA - Pos-gravacao fiscal/financeiro entrada           |
-|             PI_GER_E2   - Geracao titulos a pagar (SE2)                   |
-+----------------------------------------------------------------------------+
-*/
+// Motor de entrada (compra) - gera pedido de compra (MATA120) e nota fiscal de entrada (MATA103)
 
+// Gera pedido de compra (SC7) via MATA120 e ajusta valores fiscais do item por SQL
 User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC, cCnd)
 	Local aRet     :={.F.,"", ""}
 	Local aCab     := {}
@@ -52,7 +43,6 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 	Local aEmpFil
 	Local cCnpjU
 
-	// ---> PROTECAO ANTI-ERRO 500: Busca Segura no Dicionario <---
 	Local aTamQtd  := TamSx3("C7_QUANT")
 	Local aTamPrc  := TamSx3("C7_PRECO")
 	Local nTamQtd  := IIf(ValType(aTamQtd) == "A" .And. Len(aTamQtd) >= 2, aTamQtd[2], 4)
@@ -142,7 +132,6 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 		AAdd(aLin, {"C7_QUANT", nQtd, Nil})
 		AAdd(aLin, {"C7_PRECO", nPrcArr, Nil})
 		AAdd(aLin, {"C7_VLDESC", nDescItm, Nil})
-		// ---> C7_TOTAL foi omitido propositalmente! <---
 		AAdd(aLin, {"C7_TES", cTE, Nil})
 		AAdd(aLin, {"C7_CONTA", PadR(cCta, 20), Nil})
 		AAdd(aLin, {"C7_CC", PadR(cCC, TamSx3("C7_CC")[1]), Nil})
@@ -196,9 +185,7 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 Return aRet
 
 
-// ==========================================================================
-// COMPRAS (CLASSIFICACAO DA NOTA) - MOTOR MATA103
-// ==========================================================================
+// Gera a nota fiscal de entrada (SF1/SD1) via MATA103, vincula ao pedido de compra e ajusta titulos (SE2)
 User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil, nAval, cCond, lIsTransf)
 	Local aRet       := {.F.,""}
 	Local aCab       := {}
@@ -229,9 +216,6 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	Local aParcLegacy:= {}
 
 	Local nVlrFrete  := U_PI_VAL_X(oHead, 'vlr_Frete')
-	// [FIX-FRETE-ENTRADA] Jose Carlos - Artiq - 08/2026 - F1_FRETE/
-	// D1_VALFRE restaurados, sumiram na extracao pro PI_GERANF_X atual -
-	// ver instrucoes_pendentes_pos_debug_transf.md, Parte B.2.
 	Local nValFrete  := Round(U_PI_VAL_X(oHead, 'vlr_Frete'), 4)
 	Local nValFreteUnit := 0
 	Local nVlrSeg    := U_PI_VAL_X(oHead, 'vlr_Seguro')
@@ -260,16 +244,10 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	Local cCnpjU
 	Local dDataDigit
 
-	// Variaveis Financeiras/Bancarias
 	Local cEvtMod    := U_PI_STR_X(oHead, "cod_EventoModalidade", "cod_Evento")
 	Local cNatJson   := U_PI_STR_X(oHead, "cod_NaturezaFinanceira")
 	Local cTransacao := U_PI_STR_X(oHead, "num_Transacao")
 
-	// [FIX-TRANSF-CNPJ] Jose Carlos - Artiq - 08/2026 - lIsTransf novo
-	// parametro (default .F. se nao vier) - em CONVENIOS (transferencia),
-	// o ambiente de destino precisa ser resolvido por des_DestDocumento,
-	// nao por num_SubseccaoCNPJ (que e sempre a origem, nunca muda dentro
-	// do mesmo oHead). Ver instrucoes_pendentes_pos_debug_transf.md, A.2.
 	Default lIsTransf := .F.
 
 	If lIsTransf
@@ -279,11 +257,6 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	EndIf
 	aEmpFil := U_FATPIEMP(cCnpjU)
 
-	// [TEMP-DEBUG-TRANSF] Jose Carlos - Artiq - 08/2026 - instrumentacao
-	// temporaria pra investigar bug de transferencia reportado pelo Wilson
-	// - ver instrucao_despesa_frete_debug_transferencia.md, Parte 3. NAO
-	// aplicar correcao ainda, so instrumentar e analisar o log. Remover
-	// depois de decidido.
 	ConOut("[DEBUG-TRANSF] PI_GERANF_X entrada | cCnpjU=" + cCnpjU + " | aEmpFil=" + IIF(Len(aEmpFil)>=2, aEmpFil[1]+"/"+aEmpFil[2], "VAZIO") + " | ambiente atual=" + cEmpAnt + "/" + cFilAnt)
 
 	if Len(aEmpFil) > 0
@@ -347,8 +320,6 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 			dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_ParcelaVencimento'))
 			nVlrP := U_PI_VAL_X(oParcItem, 'vlr_Parcela')
 
-			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - se vier
-			// vazio/zero, sempre 1 (nao a posicao no loop).
 			If Empty(cNumP) .Or. cNumP == "0"
 				cNumP := "1"
 			EndIf
@@ -357,9 +328,6 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 				dVencP := dEmissao
 			EndIf
 
-			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - zero a
-			// esquerda aplicado aqui na origem, ja que o consumo mais
-			// abaixo (UPDATE SE2 via PadR) so preenche espaco, nao zero.
 			AAdd(aParcLegacy, {PadL(cNumP, TamSx3("E2_PARCELA")[1], "0"), dVencP, nVlrP})
 		Next nX
 	EndIf
@@ -394,9 +362,9 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 	AAdd(aCab, {"F1_COND", cCond, Nil})
 	AAdd(aCab, {"F1_VALBRUT", nVlrBrutV, Nil})
 	AAdd(aCab, {"F1_VALMERC", nVlrMercV, Nil})
-	AAdd(aCab, {"F1_DESCONT", nVlrDesc, Nil}) // <--- CORREÇÃO: Injetando o desconto global no cabeçalho
+	AAdd(aCab, {"F1_DESCONT", nVlrDesc, Nil})
 	AAdd(aCab, {"F1_EST", cUFEntity, Nil})
-	AAdd(aCab, {"F1_FRETE", nValFrete, Nil}) // [FIX-FRETE-ENTRADA] restaurado
+	AAdd(aCab, {"F1_FRETE", nValFrete, Nil})
 	AAdd(aCab, {"E2_NATUREZ", PADR(ALLTRIM(cNatReal),nTamNat,''), Nil})
 
 	For nI := 1 To Len(aPrd)
@@ -406,12 +374,9 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 		If nQtd <= 0 ; nQtd := 1 ; EndIf
 
 			nPrc := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario'), 4)
-			nDescItm := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd // <--- CORREÇÃO: Extraindo o desconto do item
-			// [FIX-DESPESA] Jose Carlos - Artiq - 08/2026 - restaura campo
-			// que existia no original (FZ_PRON_X) e sumiu na extracao pra
-			// PI_GERANF_X - ver instrucao_despesa_frete_debug_transferencia.md.
+			nDescItm := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd
 			nDespesa := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoOutros')
-			nValFreteUnit := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoFrete'), 4) // [FIX-FRETE-ENTRADA] restaurado
+			nValFreteUnit := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoFrete'), 4)
 
 			cProdKey := AllTrim(PadR(cValToChar(AllTrim(aPrd[nI]['cod_Produto'])), 30))
 			cItemSeq := PadL(cValToChar(nI), TamSx3("D1_ITEM")[1], "0")
@@ -437,9 +402,9 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 			AAdd(aLin, {"D1_QUANT", nQtd, Nil})
 			AAdd(aLin, {"D1_VUNIT", nPrc, Nil})
 			AAdd(aLin, {"D1_TOTAL", Round(nQtd * nPrc, 2), Nil})
-			AAdd(aLin, {"D1_VALDESC", nDescItm, Nil}) // <--- CORREÇÃO: Injetando o desconto do item para o MATA103
-			AAdd(aLin, {"D1_DESPESA", nDespesa, Nil}) // [FIX-DESPESA] restaurado, ver instrucao_despesa_frete_debug_transferencia.md
-			AAdd(aLin, {"D1_VALFRE", nValFreteUnit, Nil}) // [FIX-FRETE-ENTRADA] restaurado
+			AAdd(aLin, {"D1_VALDESC", nDescItm, Nil})
+			AAdd(aLin, {"D1_DESPESA", nDespesa, Nil})
+			AAdd(aLin, {"D1_VALFRE", nValFreteUnit, Nil})
 			AAdd(aLin, {"D1_TES", cTE, Nil})
 			AAdd(aLin, {"D1_CONTA", cCta, Nil})
 			AAdd(aLin, {"D1_CC", cCC, Nil})
@@ -586,13 +551,7 @@ User Function PI_GERANF_X(aPrd, oHead, cForn, cLoja, cDoc, cSer, cPC, cTab, cFil
 		EndIf
 		Return aRet
 
-// ==========================================================================
-// DEVOLUCOES (SAIDAS E ENTRADAS) - MOTOR MATA103
-// ==========================================================================
-// [REV2-FIX] Promovida de Static para User Function: chamada pelos Jobs
-// FATZZB01 (Devolucao) e FATZZC01 (Entrada), que sao compilados separadamente
-// do grupo FATPI01U/E/S/D/FATPI01. Static nao atravessa arquivo/unidade de
-// compilacao — a chamada quebraria em runtime sem essa promocao.
+// Reforca via SQL direto no SF1/SD1/SE2 os campos que o MATA103 nao grava (impostos, historico, natureza)
 User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
     Local nTamF1Doc  := IIf(Len(TamSx3("F1_DOC"))>0, TamSx3("F1_DOC")[1], 9)
     Local nTamF1Ser  := IIf(Len(TamSx3("F1_SERIE"))>0, TamSx3("F1_SERIE")[1], 3)
@@ -631,7 +590,6 @@ User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
     Local cTipoE2     := "NF "
     Local cHistPad    := "API: Entrada NF/RC"
     Local cNatJson    := U_PI_STR_X(oHead, "cod_NaturezaFinanceira")
-//    Local cFormaPag   := U_PI_STR_X(oHead, "des_FormaPagamento")
 
     Local nVlrMercV   := U_PI_VAL_X(oHead, 'vlr_TotalProduto')
     Local nVlrBrutV   := U_PI_VAL_X(oHead, 'vlr_NotaFiscal')
@@ -671,7 +629,6 @@ User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
     Local nVlrTitulo  := 0
     Local cParcela    := ""
 
-    // Variaveis Fiscais Adicionais (ICMS/ST)
     Local nPicmItem   := 0
     Local nBicmItem   := 0
     Local nVicmItem   := 0
@@ -724,7 +681,6 @@ User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
 
     dEmiss := U_PI_DATA_X(U_PI_STR_X(oHead, 'dta_Emissao'))
 
-    // ATUALIZACAO DO CABECALHO (SF1)
     cQryRec := "SELECT R_E_C_N_O_ AS REC FROM " + RetSqlName("SF1") + " WHERE F1_DOC='" + cDocPad + "' AND F1_SERIE='" + cSerPad + "' AND F1_FORNECE='" + cFornPad + "' AND F1_LOJA='" + cLojaPad + "' AND D_E_L_E_T_=' '"
     cAliRec := GetNextAlias() 
     MpSysOpenQuery(cQryRec, cAliRec)
@@ -753,7 +709,6 @@ User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
     EndIf
     (cAliRec)->(DbCloseArea())
 
-    // ATUALIZACAO DOS ITENS (SD1)
     If ValType(aPrd) == "A"
         For nX := 1 To Len(aPrd)
             If ValType(aPrd[nX]) == "O" .Or. ValType(aPrd[nX]) == "J"
@@ -792,22 +747,11 @@ User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
                     cQryRec += "D1_CC = '" + PadR(cCustoSD1, nTamD1CC) + "', "
                 EndIf
                 
-                // <--- CORREÇÃO: D1_VALDESC (Valor Monetário) e D1_DESC (Percentual) aplicados corretamente --->
                 cQryRec += "D1_TES = '" + cTesItm + "', "
                 cQryRec += "D1_VUNIT = " + StrTran(cValToChar(nVlrUniItm), ",", ".") + ", "
                 cQryRec += "D1_TOTAL = " + StrTran(cValToChar(nVlrBrutItm), ",", ".") + ", " 
                 cQryRec += "D1_VALDESC = " + StrTran(cValToChar(nDescItm), ",", ".") + ", "
-                cQryRec += "D1_DESC = " + StrTran(cValToChar(nPercDesc), ",", ".") 
-                
-                // Injeções Fiscais Condicionais
-                /*If Len(TamSx3("D1_PICM")) > 0  ; cQryRec += ", D1_PICM = " + StrTran(cValToChar(nPicmItem), ",", ".") ; EndIf
-                If Len(TamSx3("D1_BASEICM")) > 0 ; cQryRec += ", D1_BASEICM = " + StrTran(cValToChar(nBicmItem), ",", ".") ; EndIf
-                If Len(TamSx3("D1_VALICM")) > 0  ; cQryRec += ", D1_VALICM = " + StrTran(cValToChar(nVicmItem), ",", ".") ; EndIf
-                If Len(TamSx3("D1_BASERET")) > 0 ; cQryRec += ", D1_BASERET = " + StrTran(cValToChar(nBicmStItem), ",", ".") ; EndIf
-                If Len(TamSx3("D1_VALRET")) > 0  ; cQryRec += ", D1_VALRET = " + StrTran(cValToChar(nVicmStItem), ",", ".") ; EndIf
-                If Len(TamSx3("D1_ICMDES")) > 0  ; cQryRec += ", D1_ICMDES = " + StrTran(cValToChar(nVicmDeson), ",", ".") ; EndIf
-                If Len(TamSx3("D1_PRDICM")) > 0  ; cQryRec += ", D1_PRDICM = " + StrTran(cValToChar(nPReducIcm), ",", ".") ; EndIf
-                If Len(TamSx3("D1_PRDRET")) > 0  ; cQryRec += ", D1_PRDRET = " + StrTran(cValToChar(nPReducSt), ",", ".") ; EndIf*/
+                cQryRec += "D1_DESC = " + StrTran(cValToChar(nPercDesc), ",", ".")
 
                 cQryRec += " WHERE D1_DOC='" + cDocPad + "' AND D1_SERIE='" + cSerPad + "' AND D1_FORNECE='" + cFornPad + "' AND D1_LOJA='" + cLojaPad + "' AND D1_ITEM='" + cItemSql + "' AND D_E_L_E_T_=' '"
                 TCSqlExec(cQryRec)
@@ -815,7 +759,6 @@ User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
         Next nX
     EndIf
 
-    // ATUALIZACAO DO FINANCEIRO (SE2)
     cHistPad := "API: Entrada NF/RC"
     
     If nVlrTitulo <= 0 ; nVlrTitulo := nVlrBrutV ; EndIf
@@ -860,11 +803,7 @@ User Function JSON_COMPRA(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab)
 
 Return
 
-// ==========================================================================
-// FUNCOES DE EXECUCAO E UTILITARIOS
-// ==========================================================================
-// [REV2-FIX] Promovida de Static para User Function: chamada pelo Job
-// FATZZC01 (Entrada), compilado separadamente do grupo FATPI01U/E/S/D/FATPI01.
+// Recria as parcelas de um titulo (SE2) a partir do array de pagamentos do JSON
 User Function PI_GER_E2(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab, nRecno)
 
 	Local cQryAux
@@ -875,7 +814,6 @@ User Function PI_GER_E2(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab, nRecno)
 	Local nVlrP
 	Local cNaturez
 	Local cCusto
-//	Local cEvento
 	Local nX
 	Local cHist
 
@@ -903,8 +841,6 @@ User Function PI_GER_E2(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab, nRecno)
 			dVencP := U_PI_DATA_X(U_PI_STR_X(oParcItem, 'dta_ParcelaVencimento'))
 			nVlrP := U_PI_VAL_X(oParcItem, 'vlr_Parcela')
 
-			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - se vier
-			// vazio/zero, sempre 1 (nao a posicao no loop).
 			If Empty(cNumP) .Or. cNumP == "0"
 				cNumP := "1"
 			EndIf
@@ -913,9 +849,6 @@ User Function PI_GER_E2(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab, nRecno)
 			SE2->E2_FILIAL  := xFilial("SE2")
 			SE2->E2_PREFIXO := cSer
 			SE2->E2_NUM     := cDoc
-			// [FIX-E1-PARCELA] Jose Carlos - Artiq - 08/2026 - campo
-			// alfanumerico com zero a esquerda (confirmado 08/2026 - "1"
-			// deve virar "01"), mesmo padrao aplicado do lado de SE1.
 			SE2->E2_PARCELA := PadL(cNumP, TamSx3("E2_PARCELA")[1], "0")
 			SE2->E2_TIPO    := 'NF'
 			SE2->E2_NATUREZ := cNaturez

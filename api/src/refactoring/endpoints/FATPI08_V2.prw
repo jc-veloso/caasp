@@ -2,34 +2,13 @@
 #Include 'RestFul.ch'
 #Include 'TopConn.ch'
 
-/*/{Protheus.doc} FATPI08_V2
-Fonte: FATPI08_V2 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Hub de Vendas - SIGALOJA (Endpoint REST)
-[MOD-ZZD] Jose Carlos - Artiq - 07/2026
-O endpoint POST nao processa mais a venda diretamente. Ele valida o payload,
-verifica duplicidade (SF2 e fila) e enfileira o JSON na tabela Muro Z.
-para processamento assincrono pelo Job. O motor U_FATPI08NF e as
-funcoes de apoio (FATPI0802 a FATPI0807) permanecem inalteradas � agora sao
-chamadas pelo Job em vez de pelo WSMETHOD POST.
-[REV2] Jose Carlos - Artiq - 07/2026
-Recibo de Venda migrou de ZZD para ZZE (NFe Saida/Devolucao/Entrada/NFCe
-passaram a ocupar ZZA-ZZD). Chave de unicidade tambem mudou de _CHVNFE
-para _CODRCB, pois recibo nao possui chave de acesso NFe. Corrige bug em
-que o job antigo lia ZZD_CODRCB mas o ZZX_Gravar so gravava em _CHVNFE.
-@type class
-@version 14
-@author Antonio Nunes O Jr / Jose Carlos - Artiq
-/*/
+// POST /fatpi08/v2 - valida/dedupe/enfileira Recibo de Venda (SIGALOJA) na ZZE
+
 WSRESTFUL FATPI08_V2 DESCRIPTION 'Hub de Vendas - SIGALOJA'
 	WSMETHOD POST DESCRIPTION 'Processamento' WSSYNTAX "/fatpi08/v2" PATH "/fatpi08/v2" PRODUCES APPLICATION_JSON
 END WSRESTFUL
 
-/*/{Protheus.doc} POST
-Fonte: FATPI08_V2 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Metodo POST da API FATPI08_V2. Responsavel por ler o Body, preparar o ambiente e acionar a gravacao.
-/*/
 WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
-	// --- Declaracao de Variaveis Locais ---
 	Local lRet       := .T.
 	Local jJson      := JsonObject():New()
 	Local jRes       := JsonObject():New()
@@ -38,7 +17,6 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 	Local oData      := Nil
 	Local aEmpFil    := {}
 	Local cCnpjU     := ""
-	// [REV2] Novas variaveis - validacao de duplicidade e enfileiramento (Recibo -> ZZE)
 	Local cDocJson   := ""
 	Local cDocPad    := ""
 	Local cSerPad    := ""
@@ -51,15 +29,6 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 
 	Private __cXEvento := "LOJ"
 
-	// [PREPAREIN] Jose Carlos - Artiq - 08/2026
-	// RpcSetEnv/RpcClearEnv removidos - nao se usa dentro de WSRESTFUL (TDN
-	// oficial, "Abertura de ambiente em Web Service", a partir da 12.1.27).
-	// O ambiente ja vem pronto via PREPAREIN do appserver.ini, e
-	// empresa/filial resolvidos pelo header TenantId da requisicao. Chamar
-	// RpcSetEnv de novo aqui conflitava com esse ambiente ja aberto - foi a
-	// causa do erro visto em teste (confirmado primeiro no FATPI09). Vale
-	// so pros endpoints REST; os Jobs (FATZZA01...FATZZF01) continuam
-	// precisando, eles rodam via Schedule sem PREPAREIN.
 	Self:SetContentType('application/json')
 	cError := jJson:FromJson(cJson)
 
@@ -81,8 +50,6 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 		oData := jJson
 	EndIf
 
-	// [prod_Pendente] iPaaS agora informa se ha produto pendente direto no
-	// payload - este endpoint nunca teve checagem propria, so le e confia.
 	cProdPend := AllTrim(U_PI_STR_X(oData, 'prod_Pendente'))
 	If Empty(cProdPend) ; cProdPend := "N" ; EndIf
 
@@ -101,8 +68,6 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 		Return lRet
 	EndIf
 
-	// [REV2] Nao processa mais direto. Valida o numero do documento,
-	// checa duplicidade (SF2 ja processado / ZZE ja enfileirado) e enfileira.
 	cDocJson := U_PI_LIMPA_X(U_PI_STR_X(oData, 'cod_ReciboVenda', 'num_NF'))
 	If Empty(cDocJson)
 		cDocJson := U_PI_LIMPA_X(U_PI_STR_X(oData, 'num_NF'))
@@ -123,7 +88,6 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 	cDocPad := PadL(AllTrim(cDocJson), nTamDoc, "0")
 	cSerPad := PadR("1", TamSx3("F2_SERIE")[1], " ")
 
-	// --- Ja processado? (mesma checagem que antes existia dentro do motor) ---
 	cQryChk := "SELECT R_E_C_N_O_ AS REC FROM " + RetSqlName("SF2") + " WHERE F2_DOC='" + cDocPad + "' AND F2_SERIE='" + cSerPad + "' AND F2_FILIAL='" + xFilial("SF2") + "' AND D_E_L_E_T_=' '"
 	cAliChk := GetNextAlias()
 	MpSysOpenQuery(cQryChk, cAliChk)
@@ -141,7 +105,6 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 	EndIf
 	(cAliChk)->(DbCloseArea())
 
-	// --- Ja esta na fila ZZE aguardando o Job? (evita duplicar em retry do iPaaS) ---
 	cQryZZE := "SELECT ZZE_COD FROM " + RetSqlName("ZZE") + " WHERE ZZE_CODRCB = '" + cDocPad + "' AND ZZE_FILIAL = '" + xFilial("ZZE") + "' AND ZZE_STATUS IN ('P','A') AND D_E_L_E_T_ = ' '"
 	cAliZZE := GetNextAlias()
 	MpSysOpenQuery(cQryZZE, cAliZZE)
@@ -158,10 +121,6 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 	EndIf
 	(cAliZZE)->(DbCloseArea())
 
-	// --- Enfileira na ZZE para o Job FATZZE01 processar de forma assincrona ---
-	// [QTPROD] Jose Carlos - Artiq - 08/2026 - vem pronto no JSON, tag
-	// qt_Produto na raiz da nota (oData) - so le e repassa (ver
-	// instrucao_qtprod.md).
 	If ZZX_Gravar("ZZE", "RCV", "CODRCB", cDocPad, cJson, "", "", cProdPend, AllTrim(U_PI_STR_X(oData, 'qt_Produto')))
 		jRes['status']    := 201
 		jRes['resultado'] := "Sucesso"
@@ -178,24 +137,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI08_V2
 	Self:SetResponse(EncodeUTF8(jRes:toJSON()))
 Return lRet
 
-// ==========================================================================
-// [REV2] ZZX_Gravar - Grava registro na tabela Muro Z
-// Parametrizada por cCampoChave (antes fixava "_CHVNFE") � corrige bug em que
-// o job antigo lia ZZD_CODRCB mas essa funcao so gravava em _CHVNFE.
-// cTabMuro: "ZZE" (Recibo de Venda, endpoint FATPI08_V2)
-// cProc: "RCV"
-// cCampoChave: sufixo do campo de unicidade � "CODRCB" para Recibo
-// cChvRef: numero do cupom/recibo, ja padronizado (chave de unicidade)
-// cJsonPayload: corpo JSON original recebido do iPaaS (string, sem alteracao)
-// [prod_Pendente] Jose Carlos - Artiq - 08/2026
-// Ganhou os parametros cCampoExtra/cValorExtra/cPrdPend (default "" / "" / "N"),
-// mesma assinatura ja usada no FATPI09.prw. cPrdPend grava ZZE_PRDPEN com o
-// valor de prod_Pendente recebido do iPaaS, em vez do "N" fixo de antes.
-// [QTPROD] Jose Carlos - Artiq - 08/2026 - ganhou cQtProd (default ""),
-// parametro dedicado (nao reusa cCampoExtra) porque QTPROD e universal as 6
-// tabelas de nota - mesmo raciocinio do cPrdPend, ver [QTPROD] em
-// U_ZZX_Gravar (FATZZF01.prw) e instrucao_qtprod.md.
-// ==========================================================================
+// Grava um registro generico na tabela Muro ZZE
 Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd)
 	Local lOk  := .F.
 	Local cCod := ""
@@ -219,8 +161,6 @@ Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, 
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_HRINCL"), Time()))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_PRDPEN"), cPrdPend))
 		(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_ERRMSG"), ""))
-		// Campo numerico (N) no SIGACFG - Val(), nao FieldPut direto do texto
-		// (confirmado com Jose Carlos, ver instrucao_qtprod.md).
 		If FieldPos(cTabMuro + "_QTPROD") > 0
 			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_QTPROD"), Val(cQtProd)))
 		EndIf
@@ -235,12 +175,8 @@ Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, 
 	EndIf
 Return lOk
 
-/*/{Protheus.doc} FATPI08NF
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Gravacao Varejo NFS2 - Motor U_PI_SAIDA_X + Cirurgia Direta (SF2/SD2/SE1/SL) - SEM FISCAL
-/*/
+// Motor de recibo de venda (SIGALOJA) - grava direto, sem recalculo fiscal
 User Function FATPI08NF(oData, cFilDest)
-	// --- 1. DECLARACAO DE VARIAVEIS LOCAIS (TODAS NO TOPO) ---
 	Local jRes          := JsonObject():New()
 	Local nX            := 0
 	Local cEntC         := ""
@@ -270,8 +206,6 @@ User Function FATPI08NF(oData, cFilDest)
 	Local cNomeFin      := ""
 	Local cItemL2       := ""
 	Local cEvtMod       := U_PI_STR_X(oData, "cod_EventoModalidade", "cod_Evento")
-//	Local cTransacao    := U_PI_STR_X(oData, "num_Transacao")
-//	Local cAutoriz      := U_PI_STR_X(oData, "des_Autorizacao")
 	Local nVlrMercN     := U_PI_VAL_X(oData, 'vlr_TotalProduto', 'vlr_ReciboVendaTotal')
 	Local nVlrDescN     := U_PI_VAL_X(oData, 'vlr_Desconto', 'vlr_ReciboVendaDesconto')
 	Local nVlrSegN      := U_PI_VAL_X(oData, 'vlr_Seguro')
@@ -286,7 +220,6 @@ User Function FATPI08NF(oData, cFilDest)
 	Local cQryCli       := ""
 	Local cAliCli       := ""
 	Local cTipoOper     := "N"
-//	Local cMsgNota      := ""
 	Local lCliFound     := .F.
 	Local aRet          := {}
 	Local cQryRec       := ""
@@ -322,7 +255,6 @@ User Function FATPI08NF(oData, cFilDest)
 	Local cParc         := 'A'
 	Local cTipoTit
 
-	// --- 2. EXTRACAO SEGURA DE ARRAYS (HASPROPERTY) ---
 	If ValType(oData) == "J" .Or. ValType(oData) == "O"
 		If oData:HasProperty("itens")
 			If ValType(oData["itens"]) == "A"
@@ -331,7 +263,6 @@ User Function FATPI08NF(oData, cFilDest)
 		EndIf
 	EndIf
 
-	// --- 3. INICIO DA EXECUCAO E CHECAGENS ---
 	ChkFile("SFT")
 	ChkFile("SLQ")
 	ChkFile("SLR")
@@ -383,7 +314,6 @@ User Function FATPI08NF(oData, cFilDest)
 		lIsDevol := .T.
 	EndIf
 
-	// ---> EXTRACAO DOS DADOS DO USUARIO (CLIENTE E FUNCIONARIO) <---
 	If ValType(oData) == "J" .Or. ValType(oData) == "O"
 		If oData:HasProperty("usuario")
 			If ValType(oData["usuario"]) == "O" .Or. ValType(oData["usuario"]) == "J"
@@ -414,7 +344,6 @@ User Function FATPI08NF(oData, cFilDest)
 
 	cNomeFin := cNomeCli
 
-	// ---> BUSCA DE CLIENTE COM TRAVA 201 <---
 	If lIsDevol
 		cTipoOper := "D"
 		If !Empty(cCpfCnpj)
@@ -459,9 +388,6 @@ User Function FATPI08NF(oData, cFilDest)
 	cLojPad := PadR(cEntL, TamSx3("A1_LOJA")[1], " ")
 	cCliVarejo := cCliPad
 
-	// ---------------------------------------------------------
-	// 4. DISPARO DO MOTOR ORIGINAL DE NOTA (NF2NFS)
-	// ---------------------------------------------------------
 	cNumVenGer := GetSxeNum("SL1", "L1_NUM")
 	cOrcamento := cNumVenGer
 	ConfirmSX8()
@@ -480,9 +406,6 @@ User Function FATPI08NF(oData, cFilDest)
 		Return jRes
 	EndIf
 
-	// ---------------------------------------------------------
-	// 5. CIRURGIA DIRETA NO BANCO (NFS2) - SF2/SD2/SL
-	// ---------------------------------------------------------
 	cQryRec := "SELECT R_E_C_N_O_ AS REC FROM " + RetSqlName("SF2") + " WHERE F2_DOC='" + cDocPad + "' AND F2_SERIE='" + cSerPad + "' AND F2_CLIENTE='" + cCliPad + "' AND F2_LOJA='" + cLojPad + "' AND D_E_L_E_T_=' '"
 	cAliRec := GetNextAlias()
 	MpSysOpenQuery(cQryRec, cAliRec)
@@ -499,7 +422,6 @@ User Function FATPI08NF(oData, cFilDest)
 							If SF2->(FieldPos("F2_CHVNFE")) > 0  ; SF2->F2_CHVNFE  := PadR(cChaveNFe, TamSx3("F2_CHVNFE")[1]) ; EndIf
 								If SF2->(FieldPos("F2_ESPECIE")) > 0 ; SF2->F2_ESPECIE := PadR("NFCE", TamSx3("F2_ESPECIE")[1]) ; EndIf
 
-									// Grava Condicao 999 para habilitar multiplos pagamentos
 									If SF2->(FieldPos("F2_COND")) > 0
 										SF2->F2_COND := PadR("999", TamSx3("F2_COND")[1])
 									EndIf
@@ -542,9 +464,6 @@ User Function FATPI08NF(oData, cFilDest)
 								Next nX
 							EndIf
 
-							// ---------------------------------------------------------
-							// ATUALIZACAO E GRAVACAO FINANCEIRA (SE1 e SL4 Multiplos)
-							// ---------------------------------------------------------
 							If oData:HasProperty("recebimentos") .And. ValType(oData["recebimentos"]) == "A"
 								aPagamentos := oData["recebimentos"]
 							ElseIf oData:HasProperty("pagamentos") .And. ValType(oData["pagamentos"]) == "A"
@@ -603,7 +522,6 @@ User Function FATPI08NF(oData, cFilDest)
 
 												dVenc := U_PI_DATA_X(U_PI_STR_X(oPag, 'dta_Vencimento'))
 
-												// Grava no Contas a Receber (SE1)
 												If (cAliSE1)->(Eof())
 													RecLock("SE1", .T.)
 													SE1->E1_FILIAL  := xFilial("SE1")
@@ -641,7 +559,6 @@ User Function FATPI08NF(oData, cFilDest)
 														SE1->E1_CARTAUT := PadR(cAutorizPg, TamSx3("E1_CARTAUT")[1])
 													EndIf
 
-													// Grava Nome do Cliente no SE1
 													If SE1->(FieldPos("E1_NOMCLI")) > 0
 														SE1->E1_NOMCLI := PadR(cNomeFin, TamSx3("E1_NOMCLI")[1])
 													EndIf
@@ -673,7 +590,6 @@ User Function FATPI08NF(oData, cFilDest)
 															If !Empty(cTransac)   ; cQrySE1 += "E1_NSUTEF = '" + PadR(cTransac, TamSx3("E1_NSUTEF")[1]) + "', " ; EndIf
 																If !Empty(cAutorizPg) ; cQrySE1 += "E1_CARTAUT = '" + PadR(cAutorizPg, TamSx3("E1_CARTAUT")[1]) + "', " ; EndIf
 
-																	// Grava Nome do Cliente no SE1
 																	If Len(TamSx3("E1_NOMCLI")) > 0
 																		cQrySE1 += "E1_NOMCLI = '" + PadR(cNomeFin, TamSx3("E1_NOMCLI")[1]) + "', "
 																	EndIf
@@ -693,7 +609,6 @@ User Function FATPI08NF(oData, cFilDest)
 																	(cAliSE1)->(DbSkip())
 																EndIf
 
-																// Grava no Multiplos Pagamentos do LOJA (SL4)
 																RecLock("SL4", .T.)
 																SL4->L4_FILIAL  := xFilial("SL4")
 																SL4->L4_NUM     := cNumVenGer
@@ -724,9 +639,6 @@ User Function FATPI08NF(oData, cFilDest)
 															Next nPag
 															(cAliSE1)->(DbCloseArea())
 
-															// ---------------------------------------------------------
-															// 6. INJECAO VAREJO: SL1 e SLQ (Cupom / NFCE)
-															// ---------------------------------------------------------
 															RecLock("SL1", .T.)
 															SL1->L1_FILIAL  := xFilial("SL1")
 															SL1->L1_NUM     := cNumVenGer
@@ -861,10 +773,7 @@ User Function FATPI08NF(oData, cFilDest)
 
 																													Return jRes
 
-/*/{Protheus.doc} FATPI0802
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Gera PDF do Cupom Lendo da SF2/SD2. 
-/*/
+// Gera o PDF de comprovante de venda (FWMSPrinter)
 Static Function FATPI0802(cDocPad)
 	Local oP        := Nil
 	Local f         := "VENDA_" + AllTrim(cDocPad) + ".pdf"
@@ -942,10 +851,7 @@ Static Function FATPI0802(cDocPad)
 	oP:Print()
 Return cP
 
-/*/{Protheus.doc} FATPI0803
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Recupera ou cria diretorio para gravacao dos arquivos.
-/*/
+// Resolve/cria o diretorio de saida dos PDFs de comprovante
 Static Function FATPI0803()
 	Local d := "\" + AllTrim(GetSrvProfString("StartDir", "system")) + "\BATCH_LOJA\"
 	If !File(d)
@@ -953,10 +859,7 @@ Static Function FATPI0803()
 	EndIf
 Return d
 
-/*/{Protheus.doc} FATPI0804
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Recupera Empresa e Filial da SM0 via CNPJ formatado. 
-/*/
+// Resolve empresa/filial (SM0) por CNPJ
 Static Function FATPI0804(c)
 	Local aR := {}
 	Local cA := GetNextAlias()
@@ -972,10 +875,7 @@ Static Function FATPI0804(c)
 	(cA)->(DbCloseArea())
 Return aR
 
-/*/{Protheus.doc} FATPI0805
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Busca o Cadastro de Clientes (A1_COD e A1_LOJA) via Legado. 
-/*/
+// Resolve cliente (SA1) por codigo legado
 Static Function FATPI0805(cTipoBusca, cChaveBusca, cCodCli, cLojaCli)
 	Local lRetorno  := .F.
 	Local cAliasQry := GetNextAlias()
@@ -992,10 +892,7 @@ Static Function FATPI0805(cTipoBusca, cChaveBusca, cCodCli, cLojaCli)
 	(cAliasQry)->(DbCloseArea())
 Return lRetorno
 
-/*/{Protheus.doc} FATPI0806
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Busca Produto via Legado e retorna Array com Dados Cadastrais e Descricao (SB1).
-/*/
+// Resolve produto (SB1) por codigo legado
 Static Function FATPI0806(cProdLeg, cLogProd)
 	Local cB1Cod  := ""
 	Local cB1Um   := ""
@@ -1026,10 +923,7 @@ Static Function FATPI0806(cProdLeg, cLogProd)
 	EndIf
 Return aR
 
-/*/{Protheus.doc} FATPI0807
-Fonte: FATPI08 - Antonio Nunes O Jr - 23/04/2026
-Descritivo: Funcao de Apoio para Extracao Anti-Leak JsonObject.
-/*/
+// Le um campo do primeiro item de recebimentos/pagamentos do JSON, com fallback
 Static Function FATPI0807(oHead, cCampoReq, cCampoPag, nVlrFall)
 	Local cRet    := ""
 	Local oItm    := Nil

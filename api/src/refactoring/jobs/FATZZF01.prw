@@ -421,13 +421,34 @@ User Function UPDSTAT(cTab, cCod, cStatus, cMsg)
         cQry += ", " + cCampDtP + " = '" + DToS(Date()) + "'"
         cQry += ", " + cCampHrP + " = '" + Time() + "'"
     EndIf
-    If !Empty(cMsg)
-        cQry += ", " + cCampMsg + " = '" + StrTran(Left(cMsg, 2000), "'", "''") + "'"
-    EndIf
     cQry += " WHERE " + cCampCod + " = '" + cCod + "' AND D_E_L_E_T_ = ' '"
 
     nRet := TCSqlExec(cQry)
     ConOut("[UPDSTAT] Tab: " + cTab + " | Cod: " + cCod + " | Status: " + cStatus + " | TCSqlExec retorno: " + cValToChar(nRet))
+
+    // [FIX-ERRMSG-MEMO] Jose Carlos - Artiq - 08/2026
+    // ZZ*_ERRMSG e campo Memo no SIGACFG (confirmado) - Oracle mapeia Memo
+    // fisicamente pra RAW/LONG RAW, entao um UPDATE via TCSqlExec com
+    // texto puro faz o Oracle tentar interpretar o valor como
+    // hexadecimal, estourando ORA-01465 (invalid hex number) pra
+    // qualquer mensagem com caractere fora do range hex (a maioria -
+    // reproduzido em teste real, "NFORIGEM: ..."). O acento em "nao"
+    // NUNCA foi a causa raiz - so uma correcao real porem incompleta.
+    // Escrita de memo precisa passar pela area nativa (RecLock/FieldPut),
+    // nao por SQL direto - mesmo cuidado ja documentado pro campo _JSON
+    // (aquele e leitura, este e escrita). Separado do UPDATE acima -
+    // STATUS/DTPROC/HRPROC continuam via TCSqlExec (campos Character,
+    // sem esse problema).
+    If !Empty(cMsg)
+        DbSelectArea(cTab)
+        (cTab)->(DbSetOrder(1))
+        If (cTab)->(DbSeek(xFilial(cTab) + PadR(cCod, TamSx3(cCampCod)[1])))
+            If RecLock(cTab, .F.)
+                (cTab)->(FieldPut(FieldPos(cCampMsg), Left(cMsg, 2000)))
+                (cTab)->(MsUnlock())
+            EndIf
+        EndIf
+    EndIf
 Return
 
 // ==========================================================================

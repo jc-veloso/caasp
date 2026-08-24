@@ -42,6 +42,8 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 	Local cAliAux  := ""
 	Local aEmpFil
 	Local cCnpjU
+	Local nDespesa
+	Local cOper    := ""
 
 	Local aTamQtd  := TamSx3("C7_QUANT")
 	Local aTamPrc  := TamSx3("C7_PRECO")
@@ -111,6 +113,8 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 
 		nQtd := Round(U_PI_VAL_X(aPrd[nI], 'qtd_Produto'), nTamQtd)
 		nPrc := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario',), nTamPrc)
+		nDespesa := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoOutros')
+
 
 		nPrcArr := nPrc
 		If nPrcArr <= 0
@@ -124,6 +128,7 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 		aPrd[nI]['num_Sequencial'] := cItemSeq
 
 		nDescItm := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario'), 2) * nQtd
+		cOper := ALLTRIM(U_RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST']))
 
 		aLin := {}
 		AAdd(aLin, {"C7_ITEM", cItemSeq, Nil})
@@ -131,7 +136,10 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 		AAdd(aLin, {"C7_UM", cUm, Nil})
 		AAdd(aLin, {"C7_QUANT", nQtd, Nil})
 		AAdd(aLin, {"C7_PRECO", nPrcArr, Nil})
+		AAdd(aLin, {"C7_DESPESA", nDespesa, Nil})
 		AAdd(aLin, {"C7_VLDESC", nDescItm, Nil})
+		// ---> C7_TOTAL foi omitido propositalmente! <---
+		AAdd(aLin, {"C7_OPER", cOper, Nil})
 		AAdd(aLin, {"C7_TES", cTE, Nil})
 		AAdd(aLin, {"C7_CONTA", PadR(cCta, 20), Nil})
 		AAdd(aLin, {"C7_CC", PadR(cCC, TamSx3("C7_CC")[1]), Nil})
@@ -172,7 +180,7 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 			cQryUpd += "C7_VALIPI = " + StrTran(cValToChar(nVlrIpi), ",", ".")  + ", "
 			cQryUpd += "C7_IPI = " + StrTran(cValToChar(nPctIpi), ",", ".")  + ", "
 			cQryUpd += "C7_ICMSRET = " + StrTran(cValToChar(nVlrST), ",", ".")   + ", "
-			cQryUpd += "C7_BRICMS = " + StrTran(cValToChar(nBasST), ",", ".")   + ", "
+//			cQryUpd += "C7_BRICMS = " + StrTran(cValToChar(nBasST), ",", ".")   + ", "
 			cQryUpd += "C7_VALPIS = " + StrTran(cValToChar(nVlrPis), ",", ".")  + ", "
 			cQryUpd += "C7_VALCOF = " + StrTran(cValToChar(nVlrCof), ",", ".")  + " "
 			cQryUpd += "WHERE C7_NUM = '" + cPC + "' AND C7_ITEM = '" + cItemSql + "' AND C7_FILIAL = '" + xFilial("SC7") + "' AND D_E_L_E_T_ = ' '"

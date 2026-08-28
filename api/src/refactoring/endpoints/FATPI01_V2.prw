@@ -26,6 +26,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01_V2
 	Local cQryAux      := ""
 	Local cAliAux      := ""
 	Local cOldRestNfe  := ""
+	Local cIdIpaas     := ""
 
 	Private __cBatch   := "1"
 
@@ -62,6 +63,9 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01_V2
 	If ValType(aInv) == "A" .And. Len(aInv) > 0
 		oHead   := aInv[1]
 		cModDoc := U_PI_STR_X(oHead, 'cod_Mod', 'modelo')
+
+		cIdIpaas := AllTrim(U_PI_STR_X(oHead, 'id_Ipaas')) // id do envelope iPaaS, cabecalho ou raiz
+		If Empty(cIdIpaas) ; cIdIpaas := AllTrim(U_PI_STR_X(jJson, 'id_Ipaas')) ; EndIf
 
 		If cModDoc == "65"
 			nStat := 200
@@ -110,7 +114,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01_V2
 			EndIf
 			(cAliAux)->(DbCloseArea())
 
-			If U_ZZX_Gravar("ZZ9", "", "CHVNFE", cChave, jJson:toJSON(), "", "", cProdPend, AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
+			If U_ZZX_Gravar("ZZ9", "", "CHVNFE", cChave, jJson:toJSON(), "", "", cProdPend, AllTrim(U_PI_STR_X(oHead, 'qt_Produto')), cIdIpaas)
 				nStat := 201
 				jRes['status']    := nStat
 				jRes['resultado'] := "Sucesso"

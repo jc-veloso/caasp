@@ -25,6 +25,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 	Local lJa         := .F.
 	Local lGravou     := .F.
 	Local cCampPen    := ""
+	Local cIdIpaas    := ""
 
 	Self:SetContentType('application/json')
 
@@ -43,6 +44,8 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 	cChave   := AllTrim(U_PI_STR_X(jJson, 'chave'))
 	cTipoPen := Upper(AllTrim(U_PI_STR_X(jJson, 'tp_Participante')))
 	jDados   := jJson['dados']
+
+	cIdIpaas := AllTrim(U_PI_STR_X(jJson, 'id_Ipaas')) // id do envelope iPaaS, formato nao confirmado
 
 	If Empty(cTipoNF) .Or. Empty(cChave) .Or. Empty(cTipoPen) .Or. (ValType(jDados) != "J" .And. ValType(jDados) != "O")
 		nStat := 200
@@ -107,7 +110,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI11_V2
 	(cAliAux)->(DbCloseArea())
 
 	If !lJa
-		lGravou := U_ZZG_GRV(cChave, cTipoPen, cTipoNF, jDados:toJSON())
+		lGravou := U_ZZG_GRV(cChave, cTipoPen, cTipoNF, jDados:toJSON(), cIdIpaas)
 	Else
 		lGravou := .T.
 	EndIf

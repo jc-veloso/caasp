@@ -28,6 +28,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI10_V2
 	Local lJa         := .F.
 	Local lGravou     := .T.
 	Local nGravados   := 0
+	Local cIdIpaas    := ""
 
 	Self:SetContentType('application/json')
 
@@ -44,6 +45,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI10_V2
 
 	cTipo  := Upper(AllTrim(U_PI_STR_X(jJson, 'tipo')))
 	cChave := AllTrim(U_PI_STR_X(jJson, 'chave'))
+	cIdIpaas := AllTrim(U_PI_STR_X(jJson, 'id_Ipaas')) // best-effort, payload sem envelope completo
 	If ValType(jJson['cod_Produto']) == "A"
 		aCods := jJson['cod_Produto']
 	EndIf
@@ -114,7 +116,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI10_V2
 		(cAliAux)->(DbCloseArea())
 
 		If !lJa
-			lGravou := U_ZZF_GRV(cChave, cTipoAch, cCodProd, '{"cod_Produto":"' + cCodProd + '","tipo":"' + cTipo + '"}') .And. lGravou
+			lGravou := U_ZZF_GRV(cChave, cTipoAch, cCodProd, '{"cod_Produto":"' + cCodProd + '","tipo":"' + cTipo + '"}', cIdIpaas) .And. lGravou
 			nGravados++
 		EndIf
 	Next nI

@@ -74,6 +74,12 @@ pronta).
 
 ## 6. Conversão dos Jobs FATZZ* pra multithread/paralelo
 
+**Iniciado (08/2026)**: `FATZZC01` convertido pra Proposta 2 (`StartJob`),
+branch `feature/threads-startjob`. Desenho detalhado em
+`instrucao_startjob_zzc.md`, documentado também no `CLAUDE.md`. Os outros
+6 Jobs continuam síncronos — extensão do padrão é trabalho futuro, só
+depois de validar o `FATZZC01` em teste real (ver checklist no doc).
+
 Proposta de arquitetura completa em `arquitetura_loop_startjob.md`
 (diagramas: `diagrama_startjob_paralelo.svg`,
 `diagrama_orquestrador_pendencias.svg`). Volume atual (~5.000 notas/dia)

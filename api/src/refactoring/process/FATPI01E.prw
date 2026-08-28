@@ -151,7 +151,7 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 
 	aEx := U_PI_EXE120_X(aCab, aIt)
 	If aEx[1]
-		For nI := 1 To Len(aPrd)
+/*		For nI := 1 To Len(aPrd)
 			cItemSql := aPrd[nI]['num_Sequencial']
 
 			nQtd     := Round(U_PI_VAL_X(aPrd[nI], 'qtd_Produto'), nTamQtd)
@@ -185,7 +185,7 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 			cQryUpd += "C7_VALCOF = " + StrTran(cValToChar(nVlrCof), ",", ".")  + " "
 			cQryUpd += "WHERE C7_NUM = '" + cPC + "' AND C7_ITEM = '" + cItemSql + "' AND C7_FILIAL = '" + xFilial("SC7") + "' AND D_E_L_E_T_ = ' '"
 			TCSqlExec(cQryUpd)
-		Next nI
+		Next nI*/
 		aRet := {.T., "Ok", cPC}
 	Else
 		aRet := {.F., aEx[2], ""}

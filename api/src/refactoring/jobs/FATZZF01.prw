@@ -289,7 +289,7 @@ User Function UPDSTAT(cTab, cCod, cStatus, cMsg)
             DbSelectArea(cTab)
             (cTab)->(DbGoto(nRecno))
             If RecLock(cTab, .F.)
-                (cTab)->(FieldPut(FieldPos(cCampMsg), Left(cMsg, 2000)))
+                (cTab)->(FieldPut(FieldPos(cCampMsg), Left(cMsg, 8000))) // _ERRMSG e Memo, cap so por bom senso
                 (cTab)->(MsUnlock())
             EndIf
         Else
@@ -299,9 +299,11 @@ User Function UPDSTAT(cTab, cCod, cStatus, cMsg)
 Return
 
 // Grava um produto pendente na fila ZZF
-User Function ZZF_GRV(cChvRef, cTipoNF, cCodLeg, cJsonPayload)
+User Function ZZF_GRV(cChvRef, cTipoNF, cCodLeg, cJsonPayload, cIdIpaas)
     Local lOk  := .F.
     Local cCod := ""
+
+    Default cIdIpaas := ""
 
     cCod := GetSxeNum("ZZF", "ZZF_COD")
 
@@ -316,6 +318,9 @@ User Function ZZF_GRV(cChvRef, cTipoNF, cCodLeg, cJsonPayload)
         ZZF->ZZF_JSON   := cJsonPayload
         ZZF->ZZF_DTINCL := Date()
         ZZF->ZZF_HRINCL := Time()
+        If ZZF->(FieldPos("ZZF_IDIPS")) > 0
+            ZZF->(FieldPut(ZZF->(FieldPos("ZZF_IDIPS")), PadR(cIdIpaas, TamSx3("ZZF_IDIPS")[1])))
+        EndIf
         ZZF->(MsUnlock())
         ConfirmSx8()
         lOk := .T.
@@ -325,7 +330,7 @@ User Function ZZF_GRV(cChvRef, cTipoNF, cCodLeg, cJsonPayload)
 Return lOk
 
 // Grava um registro generico numa tabela Muro (ZZ9/ZZA-ZZE)
-User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd)
+User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd, cIdIpaas)
     Local lOk  := .F.
     Local cCod := ""
 
@@ -333,6 +338,7 @@ User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cC
     Default cValorExtra := ""
     Default cPrdPend    := "N"
     Default cQtProd     := ""
+    Default cIdIpaas    := ""
 
     cCod := GetSxeNum(cTabMuro, cTabMuro + "_COD")
 
@@ -358,6 +364,9 @@ User Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cC
         EndIf
         If FieldPos(cTabMuro + "_QTPROD") > 0
             (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_QTPROD"), Val(cQtProd)))
+        EndIf
+        If FieldPos(cTabMuro + "_IDIPS") > 0
+            (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_IDIPS"), PadR(cIdIpaas, TamSx3(cTabMuro + "_IDIPS")[1])))
         EndIf
         If !Empty(cCampoExtra)
             (cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_" + cCampoExtra), cValorExtra))

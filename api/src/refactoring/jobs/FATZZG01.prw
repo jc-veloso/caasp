@@ -104,9 +104,11 @@ User Function FATZZG01()
 Return
 
 // Grava um cliente/fornecedor pendente na fila ZZG
-User Function ZZG_GRV(cChvRef, cTipoPen, cTipoNF, cJsonPayload)
+User Function ZZG_GRV(cChvRef, cTipoPen, cTipoNF, cJsonPayload, cIdIpaas)
     Local lOk  := .F.
     Local cCod := ""
+
+    Default cIdIpaas := ""
 
     cCod := GetSxeNum("ZZG", "ZZG_COD")
 
@@ -121,6 +123,9 @@ User Function ZZG_GRV(cChvRef, cTipoPen, cTipoNF, cJsonPayload)
         ZZG->ZZG_JSON    := cJsonPayload
         ZZG->ZZG_DTINCL  := Date()
         ZZG->ZZG_HRINCL  := Time()
+        If ZZG->(FieldPos("ZZG_IDIPS")) > 0
+            ZZG->(FieldPut(ZZG->(FieldPos("ZZG_IDIPS")), PadR(cIdIpaas, TamSx3("ZZG_IDIPS")[1])))
+        EndIf
         ZZG->(MsUnlock())
         ConfirmSx8()
         lOk := .T.

@@ -15,6 +15,7 @@ User Function FATZZD01()
     Local cJson    := ""
     Local cChvNFe  := ""
     Local cFilOri  := ""
+    Local cIdIpaas := ""
     Local cErrMsg  := ""
     Local cSub     := ""
     Local cFilCb   := ""
@@ -41,7 +42,7 @@ User Function FATZZD01()
 
     RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
 
-    cQry := "SELECT ZZD_COD, ZZD_CHVNFE, ZZD_FILIAL, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZD") + " "
+    cQry := "SELECT ZZD_COD, ZZD_CHVNFE, ZZD_FILIAL, ZZD_IDIPS, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZD") + " "
     cQry += "WHERE ZZD_STATUS IN ('P','A') AND ZZD_PRDPEN = 'N' AND ZZD_CLIPEN = 'N' AND ZZD_FORPEN = 'N' "
     cQry += "AND ZZD_FILIAL = '" + xFilial("ZZD") + "' "
     cQry += "AND D_E_L_E_T_ = ' ' "
@@ -50,7 +51,7 @@ User Function FATZZD01()
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZD, .T., .T.)
 
     While (cAliZZD)->(!Eof())
-        aAdd(aFila, {AllTrim((cAliZZD)->ZZD_COD), AllTrim((cAliZZD)->ZZD_CHVNFE), AllTrim((cAliZZD)->ZZD_FILIAL), (cAliZZD)->RECNO})
+        aAdd(aFila, {AllTrim((cAliZZD)->ZZD_COD), AllTrim((cAliZZD)->ZZD_CHVNFE), AllTrim((cAliZZD)->ZZD_FILIAL), (cAliZZD)->RECNO, AllTrim((cAliZZD)->ZZD_IDIPS)})
         (cAliZZD)->(DbSkip())
     EndDo
     (cAliZZD)->(DbCloseArea())
@@ -60,6 +61,7 @@ User Function FATZZD01()
         cChvNFe := aFila[nJ][2]
         cFilOri := aFila[nJ][3]
         nRecno  := aFila[nJ][4]
+        cIdIpaas:= aFila[nJ][5]
         cErrMsg := ""
         cSub    := ""
         cFilCb  := ""
@@ -112,7 +114,7 @@ User Function FATZZD01()
             ConOut("[FATZZD01] OK: " + cCod)
         ElseIf cTipoPen == "PRD"
             U_UPDSTAT("ZZD", cCod, "P", "")
-            U_ZZF_GRV(cChvNFe, "NFC", cProdPend, "")
+            U_ZZF_GRV(cChvNFe, "NFC", cProdPend, "", cIdIpaas)
             TCSqlExec("UPDATE " + RetSqlName("ZZD") + " SET ZZD_PRDPEN = 'S' WHERE ZZD_COD = '" + cCod + "' AND ZZD_FILIAL = '" + cFilOri + "' AND D_E_L_E_T_ = ' '")
             nPark++
             ConOut("[FATZZD01] ESTACIONADA (produto pendente): " + cCod + " | Produto: " + cProdPend)

@@ -15,6 +15,7 @@ User Function FATZZ901()
     Local cJson      := ""
     Local cChvNFe    := ""
     Local cFilOri    := ""
+    Local cIdIpaas   := ""
     Local nRecno     := 0
     Local cErrMsg    := ""
     Local cSub       := ""
@@ -40,7 +41,7 @@ User Function FATZZ901()
 
     dDataBaseSis := dDataBase
 
-    cQry := "SELECT ZZ9_COD, ZZ9_CHVNFE, ZZ9_FILIAL, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZ9") + " "
+    cQry := "SELECT ZZ9_COD, ZZ9_CHVNFE, ZZ9_FILIAL, ZZ9_IDIPS, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZ9") + " "
     cQry += "WHERE ZZ9_STATUS IN ('P','A') AND ZZ9_PRDPEN = 'N' AND ZZ9_CLIPEN = 'N' AND ZZ9_FORPEN = 'N' "
     cQry += "AND ZZ9_FILIAL = '" + xFilial("ZZ9") + "' "
     cQry += "AND D_E_L_E_T_ = ' ' "
@@ -52,6 +53,7 @@ User Function FATZZ901()
         cCod    := AllTrim((cAliZZ9)->ZZ9_COD)
         cChvNFe := AllTrim((cAliZZ9)->ZZ9_CHVNFE)
         cFilOri := AllTrim((cAliZZ9)->ZZ9_FILIAL)
+        cIdIpaas:= AllTrim((cAliZZ9)->ZZ9_IDIPS)
         nRecno  := (cAliZZ9)->RECNO
         cErrMsg := ""
         cSub    := ""
@@ -103,7 +105,7 @@ User Function FATZZ901()
             ConOut("[FATZZ901] OK: " + cCod + " | Destino: " + cTabPai + IIF(lDup, " (nota ja existia, nao duplicou)", ""))
         ElseIf cTipoPen == "PRD"
             U_UPDSTAT("ZZ9", cCod, "P", "")
-            U_ZZF_GRV(cChvNFe, "ZZ9", cProdPend, "")
+            U_ZZF_GRV(cChvNFe, "ZZ9", cProdPend, "", cIdIpaas)
             TCSqlExec("UPDATE " + RetSqlName("ZZ9") + " SET ZZ9_PRDPEN = 'S' WHERE ZZ9_COD = '" + cCod + "' AND ZZ9_FILIAL = '" + cFilOri + "' AND D_E_L_E_T_ = ' '")
             nPark++
             ConOut("[FATZZ901] ESTACIONADA (produto pendente): " + cCod + " | Produto: " + cProdPend)
@@ -163,6 +165,7 @@ Static Function ZZ901_Classifica(jJson)
     Local lNcm
     Local cModDoc      := ""
     Local cTabPai      := ""
+    Local cIdIpaas     := ""
 
     If ValType(aInv) != "A" .Or. Len(aInv) == 0
         Return {.F., "Array notas ausente (ZZ9)"}
@@ -172,6 +175,9 @@ Static Function ZZ901_Classifica(jJson)
     aPrd    := oHead['itens']
     cNatOp  := Upper(AllTrim(U_PI_STR_X(oHead, 'des_NatOp')))
     cSub    := cValToChar(U_PI_VAL_X(oHead, 'cod_Subseccao'))
+
+    cIdIpaas := AllTrim(U_PI_STR_X(oHead, 'id_Ipaas')) // id do envelope iPaaS, cabecalho ou raiz
+    If Empty(cIdIpaas) ; cIdIpaas := AllTrim(U_PI_STR_X(jJson, 'id_Ipaas')) ; EndIf
 
     If ValType(aPrd) == "A" .And. Len(aPrd) > 0
         cCheckCFOP := Upper(U_PI_STR_X(aPrd[1], 'cod_ProdutoCFOP', 'cfop'))
@@ -407,7 +413,7 @@ Static Function ZZ901_Classifica(jJson)
 
     Do Case
         Case cOper == "D"
-            If !U_ZZX_Gravar("ZZB", "NFD", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "", "", "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
+            If !U_ZZX_Gravar("ZZB", "NFD", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "", "", "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')), cIdIpaas)
                 Return {.F., "Falha ao gravar na fila ZZB.", cSub}
             EndIf
 
@@ -421,12 +427,12 @@ Static Function ZZ901_Classifica(jJson)
             EndIf
             (cAliAux)->(DbCloseArea())
 
-            If !U_ZZX_Gravar("ZZA", "NFS", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "TRANSF", IIF(lIsTransf, "S", "N"), "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
+            If !U_ZZX_Gravar("ZZA", "NFS", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "TRANSF", IIF(lIsTransf, "S", "N"), "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')), cIdIpaas)
                 Return {.F., "Falha ao gravar na fila ZZA.", cSub}
             EndIf
 
         Otherwise
-            If !U_ZZX_Gravar("ZZC", "NFE", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "", "", "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
+            If !U_ZZX_Gravar("ZZC", "NFE", "CHVNFE", AllTrim(U_PI_STR_X(oHead, 'cod_ChaveNFe')), jJson:toJSON(), "", "", "N", AllTrim(U_PI_STR_X(oHead, 'qt_Produto')), cIdIpaas)
                 Return {.F., "Falha ao gravar na fila ZZC.", cSub}
             EndIf
     EndCase

@@ -32,6 +32,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI09_V2
 	Local cOldRestNfe  := ""
 	Local cStatusFila  := ""
 	Local cErrMsgFila  := ""
+	Local cIdIpaas     := ""
 
 	Private __cBatch    := "1"
 	Private __cXEvento  := "LOJ"
@@ -81,6 +82,9 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI09_V2
 
 	cProdPend := AllTrim(U_PI_STR_X(jJson, 'prod_Pendente'))
 	If Empty(cProdPend) ; cProdPend := "N" ; EndIf
+
+	cIdIpaas := AllTrim(U_PI_STR_X(oHead, 'id_Ipaas')) // id do envelope iPaaS, cabecalho ou raiz
+	If Empty(cIdIpaas) ; cIdIpaas := AllTrim(U_PI_STR_X(jJson, 'id_Ipaas')) ; EndIf
 
 	If cModDoc != "65"
 		nStat := 200
@@ -148,7 +152,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI09_V2
 	EndIf
 	(cAliAux)->(DbCloseArea())
 
-	If ZZX_Gravar("ZZD", "NFC", "CHVNFE", cChvNFe, jJson:toJSON(), "", "", cProdPend, AllTrim(U_PI_STR_X(oHead, 'qt_Produto')))
+	If ZZX_Gravar("ZZD", "NFC", "CHVNFE", cChvNFe, jJson:toJSON(), "", "", cProdPend, AllTrim(U_PI_STR_X(oHead, 'qt_Produto')), cIdIpaas)
 		nStat := 201
 		jRes['status']    := nStat
 		jRes['resultado'] := "Sucesso"
@@ -170,7 +174,7 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI09_V2
 Return lRet
 
 // Grava um registro generico na tabela Muro ZZD
-Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd)
+Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, cCampoExtra, cValorExtra, cPrdPend, cQtProd, cIdIpaas)
 	Local lOk  := .F.
 	Local cCod := ""
 
@@ -178,6 +182,7 @@ Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, 
 	Default cValorExtra := ""
 	Default cPrdPend    := "N"
 	Default cQtProd     := ""
+	Default cIdIpaas    := ""
 
 	cCod := GetSxeNum(cTabMuro, cTabMuro + "_COD")
 
@@ -201,6 +206,9 @@ Static Function ZZX_Gravar(cTabMuro, cProc, cCampoChave, cChvRef, cJsonPayload, 
 		EndIf
 		If FieldPos(cTabMuro + "_QTPROD") > 0
 			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_QTPROD"), Val(cQtProd)))
+		EndIf
+		If FieldPos(cTabMuro + "_IDIPS") > 0
+			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_IDIPS"), PadR(cIdIpaas, TamSx3(cTabMuro + "_IDIPS")[1])))
 		EndIf
 		If !Empty(cCampoExtra)
 			(cTabMuro)->(FieldPut(FieldPos(cTabMuro + "_" + cCampoExtra), cValorExtra))

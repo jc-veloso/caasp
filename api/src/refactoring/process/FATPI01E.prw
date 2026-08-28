@@ -77,7 +77,8 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 			Exit
 		EndIf
 		(cAliAux)->(DbCloseArea())
-		cPC := Soma1(cPC)
+		ConfirmSx8() // confirma (queima) o numero ja usado fisicamente, senao o SXE nunca aprende e o gap so cresce
+		cPC := GetSxeNum("SC7", "C7_NUM")
 	EndDo
 	ConfirmSx8()
 

@@ -207,6 +207,8 @@ Static Function ZZC_MotorEntrada(jJson)
     Local nValNF  := 0
     Local cNumInf := ""
     Local cNF     := ""
+    Local lTranOk := .F.
+    Local cErroFn := ""
 
     Private lMsErroAuto := .F. ; Private lAutoErrNoFile := .T.
 
@@ -229,16 +231,28 @@ Static Function ZZC_MotorEntrada(jJson)
 
     U_PI_SETFCA(AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), AllTrim(U_PI_STR_X(oHead,'_COND')), oHead)
 
-    aRet := U_PI_GERAPC_X(aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), cNF, aEmp, AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_FIL')), "", AllTrim(U_PI_STR_X(oHead,'_COND')))
+    // PC (MATA120) e NF (MATA103) numa unica transacao - se o NF falhar depois do PC ja criado, desarma e desfaz os dois, evita PC orfao sem NF
+    Begin Transaction
+        aRet := U_PI_GERAPC_X(aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), cNF, aEmp, AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_FIL')), "", AllTrim(U_PI_STR_X(oHead,'_COND')))
 
-    If !aRet[1] ; Return {.F., "MATA120: " + cValToChar(aRet[2]), cSub} ; EndIf
+        If !aRet[1]
+            cErroFn := "MATA120: " + cValToChar(aRet[2])
+            DisarmTransaction()
+        Else
+            cPCNew := aRet[3]
+            aRet   := U_PI_GERANF_X(aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), cPCNew, AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_FIL')), 0, AllTrim(U_PI_STR_X(oHead,'_COND')))
 
-    cPCNew := aRet[3]
-    aRet   := U_PI_GERANF_X(aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), cPCNew, AllTrim(U_PI_STR_X(oHead,'_TAB')), AllTrim(U_PI_STR_X(oHead,'_FIL')), 0, AllTrim(U_PI_STR_X(oHead,'_COND')))
+            If aRet[1]
+                lTranOk := .T.
+            Else
+                cErroFn := "MATA103: " + cValToChar(aRet[2])
+                DisarmTransaction()
+            EndIf
+        EndIf
+    End Transaction
 
-    If aRet[1]
-        U_JSON_COMPRA(cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_TAB')))
-        U_PI_GER_E2(cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_TAB')), SE2->(RECNO()))
-        Return {.T., "NFE: " + xFilial("SF1") + " - " + cValToChar(aRet[2]), cSub, xFilial("SF1"), cValToChar(aRet[2])}
-    EndIf
-Return {.F., "MATA103: " + cValToChar(aRet[2]), cSub}
+    If !lTranOk ; Return {.F., cErroFn, cSub} ; EndIf
+
+    U_JSON_COMPRA(cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_TAB')))
+    U_PI_GER_E2(cNF, AllTrim(U_PI_STR_X(oHead,'_SER')), AllTrim(U_PI_STR_X(oHead,'_COD')), AllTrim(U_PI_STR_X(oHead,'_LOJA')), aPrd, oHead, AllTrim(U_PI_STR_X(oHead,'_TAB')), SE2->(RECNO()))
+Return {.T., "NFE: " + xFilial("SF1") + " - " + cValToChar(aRet[2]), cSub, xFilial("SF1"), cValToChar(aRet[2])}

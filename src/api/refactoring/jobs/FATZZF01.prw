@@ -406,6 +406,7 @@ User Function ZZCALLBK(cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento,
     Local cUrl        := ""
     Local cCampoChave := ""
     Local cMsgPad     := ""
+    Local lProducao   := Upper(AllTrim(GetEnvServer())) == Upper(AllTrim(SuperGetMv("MV_XCPPRD", .F., "CZA3BD_PROD")))
 
     Do Case
         Case cTab == "ZZE"
@@ -413,7 +414,12 @@ User Function ZZCALLBK(cTab, cChave, cSubSeccao, lSucesso, cFilNota, cDocumento,
             cCampoChave := "num_PedidoReciboVenda"
             cMsgPad     := "Nota Varejo Processada"
         Otherwise
-            cUrl        := "https://api-ipaas.totvs.app/ipaas/api/v1/integrations/9aa6e2ae-1ece-4907-ba77-61c33d07bd79/api-key/6df64a64-4fc2-4b31-9c36-0958f06fcf33"
+            // callback de producao so pra Notas Fiscais - Recibo (ZZE) segue na URL de homologacao ate ter o proprio endpoint de producao
+            If lProducao
+                cUrl := "https://api-ipaas.totvs.app/ipaas/api/v1/integrations/1119ae85-a6c6-4739-8eb8-6a60be3c8d15/api-key/77f0f449-8f94-45b8-b484-12e18996b758"
+            Else
+                cUrl := "https://api-ipaas.totvs.app/ipaas/api/v1/integrations/9aa6e2ae-1ece-4907-ba77-61c33d07bd79/api-key/6df64a64-4fc2-4b31-9c36-0958f06fcf33"
+            EndIf
             cCampoChave := "cod_ChaveNFe"
             cMsgPad     := "Nota"
     EndCase

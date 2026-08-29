@@ -128,7 +128,7 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 		cItemSeq := PadL(cValToChar(nI), TamSx3("C7_ITEM")[1], "0")
 		aPrd[nI]['num_Sequencial'] := cItemSeq
 
-		nDescItm := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario'), 2) * nQtd
+		nDescItm := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd
 		cOper := ALLTRIM(U_RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST']))
 
 		aLin := {}
@@ -157,7 +157,7 @@ User Function PI_GERAPC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTp
 
 			nQtd     := Round(U_PI_VAL_X(aPrd[nI], 'qtd_Produto'), nTamQtd)
 			nPrc     := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario'), nTamPrc)
-			nDescItm := Round(U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario'), 2) * nQtd
+			nDescItm := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd
 			nTotItem := Round((nQtd * nPrc) - nDescItm, 2)
 
 			nVlrIcm  := U_PI_VAL_X(aPrd[nI], 'vlr_ProdutoICMS')

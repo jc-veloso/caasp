@@ -22,6 +22,8 @@ User Function FATZZE01()
     Local nErr     := 0
     Local jJson    := Nil
     Local aRet     := {}
+    Local cEmpOri  := cEmpAnt
+    Local cFilOri  := cFilAnt
 
     Private __cBatch := "1" ; Private __cXEvento := "LOJ"
     Private lJob      := GetRemoteType() == -1
@@ -84,6 +86,10 @@ User Function FATZZE01()
     ConOut("[FATZZE01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
     If lJob
         RpcClearEnv()
+    ElseIf cEmpAnt != cEmpOri .Or. cFilAnt != cFilOri
+        // Restaura a filial original da sessao interativa, caso algum recibo tenha trocado de filial
+        RpcClearEnv()
+        RpcSetEnv(cEmpOri, cFilOri, Nil, Nil, "LOJ")
     EndIf
 Return
 

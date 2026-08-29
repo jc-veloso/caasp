@@ -35,6 +35,8 @@ User Function FATZZD01()
     Local bErrOld  := Nil
     Local oErrRT   := Nil
     Local nTIni    := 0
+    Local cEmpSess := cEmpAnt
+    Local cFilSess := cFilAnt
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
@@ -134,6 +136,10 @@ User Function FATZZD01()
     ConOut("[FATZZD01] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
     If lJob
         RpcClearEnv()
+    ElseIf cEmpAnt != cEmpSess .Or. cFilAnt != cFilSess
+        // Restaura a filial original da sessao interativa, caso alguma nota tenha trocado de filial
+        RpcClearEnv()
+        RpcSetEnv(cEmpSess, cFilSess, Nil, Nil, "FAT")
     EndIf
 Return
 

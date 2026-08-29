@@ -29,6 +29,8 @@ User Function FATZZB01()
     Local nJ       := 0
     Local bErrOld  := Nil
     Local oErrRT   := Nil
+    Local cEmpOri  := cEmpAnt
+    Local cFilOri  := cFilAnt
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
@@ -110,6 +112,10 @@ User Function FATZZB01()
     ConOut("[FATZZB01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
     If lJob
         RpcClearEnv()
+    ElseIf cEmpAnt != cEmpOri .Or. cFilAnt != cFilOri
+        // Restaura a filial original da sessao interativa, caso alguma nota tenha trocado de filial
+        RpcClearEnv()
+        RpcSetEnv(cEmpOri, cFilOri, Nil, Nil, "FAT")
     EndIf
 Return
 

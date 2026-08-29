@@ -834,7 +834,7 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 		cItemSeq := PadL(cValToChar(nI), TamSx3("C7_ITEM")[1], "0")
 		aPrd[nI]['num_Sequencial'] := cItemSeq
 
-		nDescItm := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario'), 2) * nQtd
+		nDescItm := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd
 		cOper := ALLTRIM(RetOpera(aPrd[nI]['des_ProdutoImposto'],aPrd[nI]['cod_ProdutoCST']))
 
 		aLin := {}
@@ -863,7 +863,7 @@ User Function FZ_PROC_X(aPrd, oHead, cForn, cLoja, cLeg, aEmp, cTab, cFil, cTpC,
 
 			nQtd     := Round(U_FZ_VAL_X(aPrd[nI], 'qtd_Produto'), nTamQtd)
 			nPrc     := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario'), nTamPrc)
-			nDescItm := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario'), 2) * nQtd
+			nDescItm := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtd
 			nTotItem := Round((nQtd * nPrc) - nDescItm, 2)
 
 			nVlrIcm  := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoICMS')
@@ -1480,7 +1480,7 @@ User Function FZ_PRDEV_X(aPrd, oHead, cCli, cLoja, cDoc, cSer, cTab, cFil, nAval
 		nVlrUniItm  := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoUnitario')
 
 		// MULTIPLICANDO O DESCONTO PELA QUANTIDADE (CORRIGIDO PARA USO DE nI)
-		nDescItm    := Round(U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtdItm, 2)
+		nDescItm    := U_FZ_VAL_X(aPrd[nI], 'vlr_ProdutoDescontoUnitario') * nQtdItm
 
 		nVlrBrutItm := Round(nQtdItm * nVlrUniItm, 2)
 		nVlrLiqItm  := Round(nVlrBrutItm - nDescItm, 2)
@@ -1849,7 +1849,7 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 					nVlrUniItm  := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoUnitario')
 
 					// MULTIPLICANDO O DESCONTO PELA QUANTIDADE
-					nDescItm    := Round(U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoDescontoUnitario') * nQtdItm, 2)
+					nDescItm    := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoDescontoUnitario') * nQtdItm
 
 					nSomaMerc   += Round(nQtdItm * nVlrUniItm, 2)
 					nSomaDesc   += nDescItm
@@ -1936,7 +1936,7 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 
 																							nQtdItm     := Max(U_FZ_VAL_X(aPrd[nX], 'qtd_Produto'), 1)
 																							nVlrUniItm  := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoUnitario')
-																							nDescItm    := Round(U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoDescontoUnitario') * nQtdItm, 2)
+																							nDescItm    := U_FZ_VAL_X(aPrd[nX], 'vlr_ProdutoDescontoUnitario') * nQtdItm
 																							nVlrBrutItm := Round(nQtdItm * nVlrUniItm, 2)
 																							nVlrLiqItm  := Round(nVlrBrutItm - nDescItm, 2)
 																							cCodCST     := ALLTRIM(U_FZ_STR_X(aPrd[nX], 'cod_ProdutoCST'))

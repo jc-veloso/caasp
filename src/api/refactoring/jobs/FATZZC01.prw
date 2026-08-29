@@ -28,10 +28,13 @@ User Function FATZZC01()
     Local cThrDtOri := ""
 
     Private __cBatch := "1"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZC01] Iniciando NFe Entrada - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    EndIf
 
     nMaxThr   := SuperGetMv("MV_XCPTHR", .F., 10)
     nStaleMin := SuperGetMv("MV_XCPSTL", .F., 15)
@@ -103,7 +106,9 @@ User Function FATZZC01()
     Next nJ
 
     ConOut("[FATZZC01] Fim. " + cValToChar(nDisparadas) + " nota(s) disparada(s) para processamento paralelo.")
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Minutos decorridos desde o claim (dThrDt/cThrHr) ate agora, em AdvPL puro. Vazio conta como muito antigo.

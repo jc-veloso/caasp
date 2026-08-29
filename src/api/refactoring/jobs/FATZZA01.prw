@@ -32,10 +32,13 @@ User Function FATZZA01()
     Local oErrRT   := Nil
 
     Private __cBatch := "1"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZA01] Iniciando NFe Saida - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    EndIf
 
     cQry := "SELECT ZZA_COD, ZZA_CHVNFE, ZZA_PROC, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZA") + " "
     cQry += "WHERE ZZA_STATUS IN ('P','A') AND ZZA_PRDPEN = 'N' "
@@ -111,7 +114,9 @@ User Function FATZZA01()
     Next nJ
 
     ConOut("[FATZZA01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Resolve numeracao/CFOP, dispara U_PI_SAIDA_X e trata transferencia entre filiais (CONVENIOS)

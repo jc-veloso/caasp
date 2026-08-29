@@ -27,10 +27,13 @@ User Function FATZZG01()
     Local nTIni    := 0
 
     Private __cBatch := "1"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZG01] Iniciando Cliente/Fornecedor Pendente - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    EndIf
 
     cQry := "SELECT ZZG_COD, ZZG_CHVREF, ZZG_TIPOPE, ZZG_TIPONF, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZG") + " "
     cQry += "WHERE ZZG_STATUS IN ('P','A') "
@@ -100,7 +103,9 @@ User Function FATZZG01()
     (cAliZZG)->(DbCloseArea())
 
     ConOut("[FATZZG01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Grava um cliente/fornecedor pendente na fila ZZG

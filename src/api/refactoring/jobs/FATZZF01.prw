@@ -25,10 +25,13 @@ User Function FATZZF01()
     Local nTIni    := 0
 
     Private __cBatch := "1"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZF01] Iniciando Produtos Pendentes - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    EndIf
 
     cQry := "SELECT ZZF_COD, ZZF_CHVREF, ZZF_TIPONF, ZZF_CODLEG FROM " + RetSqlName("ZZF") + " "
     cQry += "WHERE ZZF_STATUS IN ('P','A') "
@@ -100,7 +103,9 @@ User Function FATZZF01()
     (cAliZZF)->(DbCloseArea())
 
     ConOut("[FATZZF01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Busca o cadastro definitivo do produto na API da CAASP e chama U_PI_PROD_X para gravar (SB1)

@@ -31,10 +31,13 @@ User Function FATZZB01()
     Local oErrRT   := Nil
 
     Private __cBatch := "1"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZB01] Iniciando NFe Devolucao - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    EndIf
 
     cQry := "SELECT ZZB_COD, ZZB_CHVNFE, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZB") + " "
     cQry += "WHERE ZZB_STATUS IN ('P','A') AND ZZB_PRDPEN = 'N' "
@@ -105,7 +108,9 @@ User Function FATZZB01()
     Next nJ
 
     ConOut("[FATZZB01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Resolve numeracao e dispara U_PI_DEVOL_X (MATA103 tipo devolucao)

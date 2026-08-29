@@ -34,10 +34,13 @@ User Function FATZZ901()
     Local oErrRT     := Nil
 
     Private __cBatch := "1"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZ901] Iniciando Classificacao NFe (ZZ9) - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    EndIf
 
     dDataBaseSis := dDataBase
 
@@ -126,7 +129,9 @@ User Function FATZZ901()
     (cAliZZ9)->(DbCloseArea())
 
     ConOut("[FATZZ901] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Classifica uma nota NFe (roteamento SA1/SA2, cOper, produtos/CFOP/TES) e grava em ZZA/ZZB/ZZC

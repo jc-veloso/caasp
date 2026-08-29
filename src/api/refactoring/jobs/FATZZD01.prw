@@ -37,10 +37,13 @@ User Function FATZZD01()
     Local nTIni    := 0
 
     Private __cBatch := "1"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZD01] Iniciando NFCe - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
+    EndIf
 
     cQry := "SELECT ZZD_COD, ZZD_CHVNFE, ZZD_FILIAL, ZZD_IDIPS, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZD") + " "
     cQry += "WHERE ZZD_STATUS IN ('P','A') AND ZZD_PRDPEN = 'N' AND ZZD_CLIPEN = 'N' AND ZZD_FORPEN = 'N' "
@@ -129,7 +132,9 @@ User Function FATZZD01()
     Next nJ
 
     ConOut("[FATZZD01] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Resolve cliente/numeracao/CFOP e dispara U_PI_SAIDA_X (grava SF2/SD2, marcados como NFCE)

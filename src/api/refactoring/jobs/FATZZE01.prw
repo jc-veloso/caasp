@@ -24,10 +24,13 @@ User Function FATZZE01()
     Local aRet     := {}
 
     Private __cBatch := "1" ; Private __cXEvento := "LOJ"
+    Private lJob      := GetRemoteType() == -1
 
     ConOut("[FATZZE01] Iniciando Recibo de Venda - " + DToS(Date()) + " " + Time())
 
-    RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "LOJ")
+    If lJob
+        RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "LOJ")
+    EndIf
 
     cQry := "SELECT ZZE_COD, ZZE_CODRCB, R_E_C_N_O_ AS RECNO FROM " + RetSqlName("ZZE") + " "
     cQry += "WHERE ZZE_STATUS IN ('P','A') AND ZZE_PRDPEN = 'N' "
@@ -79,7 +82,9 @@ User Function FATZZE01()
     (cAliZZE)->(DbCloseArea())
 
     ConOut("[FATZZE01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    RpcClearEnv()
+    If lJob
+        RpcClearEnv()
+    EndIf
 Return
 
 // Resolve filial e dispara U_FATPI08NF (motor de recibo de venda, sem recalculo fiscal)

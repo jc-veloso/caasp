@@ -11,30 +11,14 @@ Static CFILPAD := "01001"
 User Function FATZZA01()
     Local cAliZZA  := GetNextAlias()
     Local cQry     := ""
-    Local cCod     := ""
-    Local cJson    := ""
-    Local cChvNFe  := ""
-    Local cProc    := ""
-    Local cErrMsg  := ""
-    Local cSub     := ""
-    Local cFilCb   := ""
-    Local cDocCb   := ""
-    Local cMsgSuc  := ""
-    Local nRecno   := 0
-    Local lOk      := .F.
-    Local nOk      := 0
-    Local nErr     := 0
-    Local jJson    := Nil
-    Local aRet     := {}
-    Local aFila    := {}
-    Local nJ       := 0
-    Local bErrOld  := Nil
-    Local oErrRT   := Nil
     Local cEmpOri  := cEmpAnt
     Local cFilOri  := cFilAnt
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
+    Private aFila      := {}
+    Private nOk        := 0
+    Private nErr       := 0
 
     ConOut("[FATZZA01] Iniciando NFe Saida - " + DToS(Date()) + " " + Time())
 
@@ -56,6 +40,45 @@ User Function FATZZA01()
     EndDo
     (cAliZZA)->(DbCloseArea())
 
+    If lJob
+        ZZA_ProcessaFila()
+    Else
+        Processa({|| ZZA_ProcessaFila()}, "FATZZA01", "Processando NFe Saida...")
+    EndIf
+
+    ConOut("[FATZZA01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
+    If lJob
+        RpcClearEnv()
+    ElseIf cEmpAnt != cEmpOri .Or. cFilAnt != cFilOri
+        // Restaura a filial original da sessao interativa, caso alguma nota tenha trocado de filial (CONVENIOS)
+        RpcClearEnv()
+        RpcSetEnv(cEmpOri, cFilOri, Nil, Nil, "FAT")
+    EndIf
+Return
+
+// Percorre aFila (Private) processando cada nota; nOk/nErr (Private) acumulam o resultado
+Static Function ZZA_ProcessaFila()
+    Local cCod     := ""
+    Local cJson    := ""
+    Local cChvNFe  := ""
+    Local cProc    := ""
+    Local cErrMsg  := ""
+    Local cSub     := ""
+    Local cFilCb   := ""
+    Local cDocCb   := ""
+    Local cMsgSuc  := ""
+    Local nRecno   := 0
+    Local lOk      := .F.
+    Local jJson    := Nil
+    Local aRet     := {}
+    Local nJ       := 0
+    Local bErrOld  := Nil
+    Local oErrRT   := Nil
+
+    If !lJob
+        ProcRegua(Len(aFila))
+    EndIf
+
     For nJ := 1 To Len(aFila)
         cCod    := aFila[nJ][1]
         cChvNFe := aFila[nJ][2]
@@ -67,6 +90,10 @@ User Function FATZZA01()
         cDocCb  := ""
         cMsgSuc := ""
         lOk     := .F.
+
+        If !lJob
+            IncProc("Nota " + cCod + " (" + cValToChar(nJ) + "/" + cValToChar(Len(aFila)) + ")")
+        EndIf
 
         DbSelectArea("ZZA")
         ZZA->(DbGoto(nRecno))
@@ -114,15 +141,6 @@ User Function FATZZA01()
             ConOut("[FATZZA01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
     Next nJ
-
-    ConOut("[FATZZA01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    If lJob
-        RpcClearEnv()
-    ElseIf cEmpAnt != cEmpOri .Or. cFilAnt != cFilOri
-        // Restaura a filial original da sessao interativa, caso alguma nota tenha trocado de filial (CONVENIOS)
-        RpcClearEnv()
-        RpcSetEnv(cEmpOri, cFilOri, Nil, Nil, "FAT")
-    EndIf
 Return
 
 // Resolve numeracao/CFOP, dispara U_PI_SAIDA_X e trata transferencia entre filiais (CONVENIOS)

@@ -11,22 +11,14 @@ Static CFILPAD := "01001"
 User Function FATZZE01()
     Local cAliZZE  := GetNextAlias()
     Local cQry     := ""
-    Local cCod     := ""
-    Local cJson    := ""
-    Local cCodRcb  := ""
-    Local cErrMsg  := ""
-    Local cSub     := ""
-    Local nRecno   := 0
-    Local lOk      := .F.
-    Local nOk      := 0
-    Local nErr     := 0
-    Local jJson    := Nil
-    Local aRet     := {}
     Local cEmpOri  := cEmpAnt
     Local cFilOri  := cFilAnt
 
     Private __cBatch := "1" ; Private __cXEvento := "LOJ"
     Private lJob      := GetRemoteType() == -1
+    Private aFila      := {}
+    Private nOk        := 0
+    Private nErr       := 0
 
     ConOut("[FATZZE01] Iniciando Recibo de Venda - " + DToS(Date()) + " " + Time())
 
@@ -43,11 +35,54 @@ User Function FATZZE01()
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZE, .T., .T.)
 
     While (cAliZZE)->(!Eof())
-        cCod    := AllTrim((cAliZZE)->ZZE_COD)
-        cCodRcb := AllTrim((cAliZZE)->ZZE_CODRCB)
-        nRecno  := (cAliZZE)->RECNO
+        aAdd(aFila, {AllTrim((cAliZZE)->ZZE_COD), AllTrim((cAliZZE)->ZZE_CODRCB), (cAliZZE)->RECNO})
+        (cAliZZE)->(DbSkip())
+    EndDo
+    (cAliZZE)->(DbCloseArea())
+
+    If lJob
+        ZZE_ProcessaFila()
+    Else
+        Processa({|| ZZE_ProcessaFila()}, "FATZZE01", "Processando Recibos de Venda...")
+    EndIf
+
+    ConOut("[FATZZE01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
+    If lJob
+        RpcClearEnv()
+    ElseIf cEmpAnt != cEmpOri .Or. cFilAnt != cFilOri
+        // Restaura a filial original da sessao interativa, caso algum recibo tenha trocado de filial
+        RpcClearEnv()
+        RpcSetEnv(cEmpOri, cFilOri, Nil, Nil, "LOJ")
+    EndIf
+Return
+
+// Percorre aFila (Private) processando cada recibo; nOk/nErr (Private) acumulam o resultado
+Static Function ZZE_ProcessaFila()
+    Local cCod     := ""
+    Local cJson    := ""
+    Local cCodRcb  := ""
+    Local cErrMsg  := ""
+    Local cSub     := ""
+    Local nRecno   := 0
+    Local lOk      := .F.
+    Local jJson    := Nil
+    Local aRet     := {}
+    Local nJ       := 0
+
+    If !lJob
+        ProcRegua(Len(aFila))
+    EndIf
+
+    For nJ := 1 To Len(aFila)
+        cCod    := aFila[nJ][1]
+        cCodRcb := aFila[nJ][2]
+        nRecno  := aFila[nJ][3]
         cErrMsg := ""
         lOk     := .F.
+
+        If !lJob
+            IncProc("Recibo " + cCod + " (" + cValToChar(nJ) + "/" + cValToChar(Len(aFila)) + ")")
+        EndIf
 
         DbSelectArea("ZZE")
         ZZE->(DbGoto(nRecno))
@@ -78,19 +113,7 @@ User Function FATZZE01()
             nErr++
             ConOut("[FATZZE01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
-
-        (cAliZZE)->(DbSkip())
-    EndDo
-    (cAliZZE)->(DbCloseArea())
-
-    ConOut("[FATZZE01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    If lJob
-        RpcClearEnv()
-    ElseIf cEmpAnt != cEmpOri .Or. cFilAnt != cFilOri
-        // Restaura a filial original da sessao interativa, caso algum recibo tenha trocado de filial
-        RpcClearEnv()
-        RpcSetEnv(cEmpOri, cFilOri, Nil, Nil, "LOJ")
-    EndIf
+    Next nJ
 Return
 
 // Resolve filial e dispara U_FATPI08NF (motor de recibo de venda, sem recalculo fiscal)

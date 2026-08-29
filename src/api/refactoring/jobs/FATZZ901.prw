@@ -11,30 +11,14 @@
 User Function FATZZ901()
     Local cAliZZ9    := GetNextAlias()
     Local cQry       := ""
-    Local cCod       := ""
-    Local cJson      := ""
-    Local cChvNFe    := ""
-    Local cFilOri    := ""
-    Local cIdIpaas   := ""
-    Local nRecno     := 0
-    Local cErrMsg    := ""
-    Local cSub       := ""
-    Local cTabPai    := ""
-    Local cTipoPen   := ""
-    Local cProdPend  := ""
-    Local lOk        := .F.
-    Local lDup       := .F.
-    Local nOk        := 0
-    Local nErr       := 0
-    Local nPark      := 0
-    Local jJson      := Nil
-    Local aRet       := {}
-    Local dDataBaseSis := CToD("")
-    Local bErrOld    := Nil
-    Local oErrRT     := Nil
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
+    Private aFila      := {}
+    Private nOk        := 0
+    Private nErr       := 0
+    Private nPark      := 0
+    Private dDataBaseSis := CToD("")
 
     ConOut("[FATZZ901] Iniciando Classificacao NFe (ZZ9) - " + DToS(Date()) + " " + Time())
 
@@ -53,11 +37,54 @@ User Function FATZZ901()
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZ9, .T., .T.)
 
     While (cAliZZ9)->(!Eof())
-        cCod    := AllTrim((cAliZZ9)->ZZ9_COD)
-        cChvNFe := AllTrim((cAliZZ9)->ZZ9_CHVNFE)
-        cFilOri := AllTrim((cAliZZ9)->ZZ9_FILIAL)
-        cIdIpaas:= AllTrim((cAliZZ9)->ZZ9_IDIPS)
-        nRecno  := (cAliZZ9)->RECNO
+        aAdd(aFila, {AllTrim((cAliZZ9)->ZZ9_COD), AllTrim((cAliZZ9)->ZZ9_CHVNFE), AllTrim((cAliZZ9)->ZZ9_FILIAL), AllTrim((cAliZZ9)->ZZ9_IDIPS), (cAliZZ9)->RECNO})
+        (cAliZZ9)->(DbSkip())
+    EndDo
+    (cAliZZ9)->(DbCloseArea())
+
+    If lJob
+        ZZ9_ProcessaFila()
+    Else
+        Processa({|| ZZ9_ProcessaFila()}, "FATZZ901", "Classificando NFe...")
+    EndIf
+
+    ConOut("[FATZZ901] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
+    If lJob
+        RpcClearEnv()
+    EndIf
+Return
+
+// Percorre aFila (Private) classificando cada nota; nOk/nErr/nPark (Private) acumulam o resultado
+Static Function ZZ9_ProcessaFila()
+    Local cCod       := ""
+    Local cJson      := ""
+    Local cChvNFe    := ""
+    Local cFilOri    := ""
+    Local cIdIpaas   := ""
+    Local nRecno     := 0
+    Local cErrMsg    := ""
+    Local cSub       := ""
+    Local cTabPai    := ""
+    Local cTipoPen   := ""
+    Local cProdPend  := ""
+    Local lOk        := .F.
+    Local lDup       := .F.
+    Local jJson      := Nil
+    Local aRet       := {}
+    Local nJ         := 0
+    Local bErrOld    := Nil
+    Local oErrRT     := Nil
+
+    If !lJob
+        ProcRegua(Len(aFila))
+    EndIf
+
+    For nJ := 1 To Len(aFila)
+        cCod    := aFila[nJ][1]
+        cChvNFe := aFila[nJ][2]
+        cFilOri := aFila[nJ][3]
+        cIdIpaas:= aFila[nJ][4]
+        nRecno  := aFila[nJ][5]
         cErrMsg := ""
         cSub    := ""
         cTabPai := ""
@@ -65,6 +92,10 @@ User Function FATZZ901()
         cProdPend := ""
         lOk     := .F.
         lDup    := .F.
+
+        If !lJob
+            IncProc("Nota " + cCod + " (" + cValToChar(nJ) + "/" + cValToChar(Len(aFila)) + ")")
+        EndIf
 
         dDataBase := dDataBaseSis
 
@@ -123,15 +154,7 @@ User Function FATZZ901()
             nErr++
             ConOut("[FATZZ901] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
-
-        (cAliZZ9)->(DbSkip())
-    EndDo
-    (cAliZZ9)->(DbCloseArea())
-
-    ConOut("[FATZZ901] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
-    If lJob
-        RpcClearEnv()
-    EndIf
+    Next nJ
 Return
 
 // Classifica uma nota NFe (roteamento SA1/SA2, cOper, produtos/CFOP/TES) e grava em ZZA/ZZB/ZZC

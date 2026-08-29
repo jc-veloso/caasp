@@ -11,24 +11,14 @@ Static CFILPAD := "01001"
 User Function FATZZC01()
     Local cAliZZC   := GetNextAlias()
     Local cQry      := ""
-    Local cCod      := ""
-    Local cJson     := ""
-    Local cChvNFe   := ""
-    Local nRecno    := 0
-    Local aFila     := {}
-    Local nJ        := 0
-    Local nDisparadas := 0
-    Local nMaxThr   := 0
-    Local nStaleMin := 0
-    Local cQryClaim := ""
-    Local cClaimTok := ""
-    Local lClaimOk  := .F.
-    Local cAliCheck := ""
-    Local cQryCheck := ""
-    Local cThrDtOri := ""
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
+    Private aFila      := {}
+    Private nDisparadas := 0
+    Private nMaxThr     := 0
+    Private nStaleMin   := 0
+    Private cClaimTok   := ""
 
     ConOut("[FATZZC01] Iniciando NFe Entrada - " + DToS(Date()) + " " + Time())
 
@@ -58,10 +48,43 @@ User Function FATZZC01()
     EndDo
     (cAliZZC)->(DbCloseArea())
 
+    If lJob
+        ZZC_DisparaFila()
+    Else
+        Processa({|| ZZC_DisparaFila()}, "FATZZC01", "Disparando NFe Entrada...")
+    EndIf
+
+    ConOut("[FATZZC01] Fim. " + cValToChar(nDisparadas) + " nota(s) disparada(s) para processamento paralelo.")
+    If lJob
+        RpcClearEnv()
+    EndIf
+Return
+
+// Percorre aFila (Private) reivindicando e disparando StartJob por nota; nDisparadas (Private) acumula o total
+Static Function ZZC_DisparaFila()
+    Local cCod      := ""
+    Local cJson     := ""
+    Local cChvNFe   := ""
+    Local nRecno    := 0
+    Local nJ        := 0
+    Local cQryClaim := ""
+    Local lClaimOk  := .F.
+    Local cAliCheck := ""
+    Local cQryCheck := ""
+    Local cThrDtOri := ""
+
+    If !lJob
+        ProcRegua(Len(aFila))
+    EndIf
+
     For nJ := 1 To Len(aFila)
         cCod    := aFila[nJ][1]
         cChvNFe := aFila[nJ][2]
         nRecno  := aFila[nJ][3]
+
+        If !lJob
+            IncProc("Nota " + cCod + " (" + cValToChar(nJ) + "/" + cValToChar(Len(aFila)) + ")")
+        EndIf
 
         // Reposiciona na area nativa ZZC so pra ler o memo certo
         DbSelectArea("ZZC")
@@ -104,11 +127,6 @@ User Function FATZZC01()
         nDisparadas++
         ConOut("[FATZZC01] Disparada: " + cCod + " | Chave: " + cChvNFe)
     Next nJ
-
-    ConOut("[FATZZC01] Fim. " + cValToChar(nDisparadas) + " nota(s) disparada(s) para processamento paralelo.")
-    If lJob
-        RpcClearEnv()
-    EndIf
 Return
 
 // Minutos decorridos desde o claim (dThrDt/cThrHr) ate agora, em AdvPL puro. Vazio conta como muito antigo.

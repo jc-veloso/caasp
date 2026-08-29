@@ -11,35 +11,15 @@ Static CFILPAD := "01001"
 User Function FATZZD01()
     Local cAliZZD  := GetNextAlias()
     Local cQry     := ""
-    Local cCod     := ""
-    Local cJson    := ""
-    Local cChvNFe  := ""
-    Local cFilOri  := ""
-    Local cIdIpaas := ""
-    Local cErrMsg  := ""
-    Local cSub     := ""
-    Local cFilCb   := ""
-    Local cDocCb   := ""
-    Local cMsgSuc  := ""
-    Local cTipoPen := ""
-    Local cProdPend:= ""
-    Local nRecno   := 0
-    Local lOk      := .F.
-    Local nOk      := 0
-    Local nErr     := 0
-    Local nPark    := 0
-    Local jJson    := Nil
-    Local aRet     := {}
-    Local aFila    := {}
-    Local nJ       := 0
-    Local bErrOld  := Nil
-    Local oErrRT   := Nil
-    Local nTIni    := 0
     Local cEmpSess := cEmpAnt
     Local cFilSess := cFilAnt
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
+    Private aFila      := {}
+    Private nOk        := 0
+    Private nErr       := 0
+    Private nPark      := 0
 
     ConOut("[FATZZD01] Iniciando NFCe - " + DToS(Date()) + " " + Time())
 
@@ -61,6 +41,49 @@ User Function FATZZD01()
     EndDo
     (cAliZZD)->(DbCloseArea())
 
+    If lJob
+        ZZD_ProcessaFila()
+    Else
+        Processa({|| ZZD_ProcessaFila()}, "FATZZD01", "Processando NFCe...")
+    EndIf
+
+    ConOut("[FATZZD01] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
+    If lJob
+        RpcClearEnv()
+    ElseIf cEmpAnt != cEmpSess .Or. cFilAnt != cFilSess
+        // Restaura a filial original da sessao interativa, caso alguma nota tenha trocado de filial
+        RpcClearEnv()
+        RpcSetEnv(cEmpSess, cFilSess, Nil, Nil, "FAT")
+    EndIf
+Return
+
+// Percorre aFila (Private) processando cada nota; nOk/nErr/nPark (Private) acumulam o resultado
+Static Function ZZD_ProcessaFila()
+    Local cCod      := ""
+    Local cJson     := ""
+    Local cChvNFe   := ""
+    Local cFilOri   := ""
+    Local cIdIpaas  := ""
+    Local cErrMsg   := ""
+    Local cSub      := ""
+    Local cFilCb    := ""
+    Local cDocCb    := ""
+    Local cMsgSuc   := ""
+    Local cTipoPen  := ""
+    Local cProdPend := ""
+    Local nRecno    := 0
+    Local lOk       := .F.
+    Local jJson     := Nil
+    Local aRet      := {}
+    Local nJ        := 0
+    Local bErrOld   := Nil
+    Local oErrRT    := Nil
+    Local nTIni     := 0
+
+    If !lJob
+        ProcRegua(Len(aFila))
+    EndIf
+
     For nJ := 1 To Len(aFila)
         cCod    := aFila[nJ][1]
         cChvNFe := aFila[nJ][2]
@@ -75,6 +98,10 @@ User Function FATZZD01()
         cTipoPen := ""
         cProdPend := ""
         lOk     := .F.
+
+        If !lJob
+            IncProc("Nota " + cCod + " (" + cValToChar(nJ) + "/" + cValToChar(Len(aFila)) + ")")
+        EndIf
 
         DbSelectArea("ZZD")
         ZZD->(DbGoto(nRecno))
@@ -132,15 +159,6 @@ User Function FATZZD01()
             ConOut("[FATZZD01] ERRO: " + cCod + " | " + Left(cErrMsg, 100))
         EndIf
     Next nJ
-
-    ConOut("[FATZZD01] Fim. OK: " + cValToChar(nOk) + " | Estacionadas: " + cValToChar(nPark) + " | Erro: " + cValToChar(nErr))
-    If lJob
-        RpcClearEnv()
-    ElseIf cEmpAnt != cEmpSess .Or. cFilAnt != cFilSess
-        // Restaura a filial original da sessao interativa, caso alguma nota tenha trocado de filial
-        RpcClearEnv()
-        RpcSetEnv(cEmpSess, cFilSess, Nil, Nil, "FAT")
-    EndIf
 Return
 
 // Resolve cliente/numeracao/CFOP e dispara U_PI_SAIDA_X (grava SF2/SD2, marcados como NFCE)

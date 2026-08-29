@@ -12,20 +12,12 @@ STATIC CFILPAD := "01001"
 User Function FATZZF01()
     Local cAliZZF  := GetNextAlias()
     Local cQry     := ""
-    Local cCod     := ""
-    Local cChvRef  := ""
-    Local cTipoNF  := ""
-    Local cCodLeg  := ""
-    Local cErrMsg  := ""
-    Local lOk      := .F.
-    Local nOk      := 0
-    Local nErr     := 0
-    Local aRet     := {}
-    Local cTabPai  := ""
-    Local nTIni    := 0
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
+    Private aFila      := {}
+    Private nOk        := 0
+    Private nErr       := 0
 
     ConOut("[FATZZF01] Iniciando Produtos Pendentes - " + DToS(Date()) + " " + Time())
 
@@ -42,12 +34,51 @@ User Function FATZZF01()
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZF, .T., .T.)
 
     While (cAliZZF)->(!Eof())
-        cCod    := AllTrim((cAliZZF)->ZZF_COD)
-        cChvRef := AllTrim((cAliZZF)->ZZF_CHVREF)
-        cTipoNF := AllTrim((cAliZZF)->ZZF_TIPONF)
-        cCodLeg := AllTrim((cAliZZF)->ZZF_CODLEG)
+        aAdd(aFila, {AllTrim((cAliZZF)->ZZF_COD), AllTrim((cAliZZF)->ZZF_CHVREF), AllTrim((cAliZZF)->ZZF_TIPONF), AllTrim((cAliZZF)->ZZF_CODLEG)})
+        (cAliZZF)->(DbSkip())
+    EndDo
+    (cAliZZF)->(DbCloseArea())
+
+    If lJob
+        ZZF_ProcessaFila()
+    Else
+        Processa({|| ZZF_ProcessaFila()}, "FATZZF01", "Cadastrando Produtos Pendentes...")
+    EndIf
+
+    ConOut("[FATZZF01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
+    If lJob
+        RpcClearEnv()
+    EndIf
+Return
+
+// Percorre aFila (Private) cadastrando cada produto pendente; nOk/nErr (Private) acumulam o resultado
+Static Function ZZF_ProcessaFila()
+    Local cCod     := ""
+    Local cChvRef  := ""
+    Local cTipoNF  := ""
+    Local cCodLeg  := ""
+    Local cErrMsg  := ""
+    Local lOk      := .F.
+    Local aRet     := {}
+    Local cTabPai  := ""
+    Local nTIni    := 0
+    Local nJ       := 0
+
+    If !lJob
+        ProcRegua(Len(aFila))
+    EndIf
+
+    For nJ := 1 To Len(aFila)
+        cCod    := aFila[nJ][1]
+        cChvRef := aFila[nJ][2]
+        cTipoNF := aFila[nJ][3]
+        cCodLeg := aFila[nJ][4]
         cErrMsg := ""
         lOk     := .F.
+
+        If !lJob
+            IncProc("Produto " + cCodLeg + " (" + cValToChar(nJ) + "/" + cValToChar(Len(aFila)) + ")")
+        EndIf
 
         U_UPDSTAT("ZZF", cCod, "A", "")
         ConOut("[FATZZF01] Cadastrando produto: " + cCodLeg + " | Ref: " + cChvRef + " | Tipo: " + cTipoNF)
@@ -97,15 +128,7 @@ User Function FATZZF01()
             nTIni := Seconds()
             ConOut("[TIMING][FATZZF01] Callback iPaaS (erro): " + cValToChar(Seconds() - nTIni) + "s | " + cChvRef)
         EndIf
-
-        (cAliZZF)->(DbSkip())
-    EndDo
-    (cAliZZF)->(DbCloseArea())
-
-    ConOut("[FATZZF01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    If lJob
-        RpcClearEnv()
-    EndIf
+    Next nJ
 Return
 
 // Busca o cadastro definitivo do produto na API da CAASP e chama U_PI_PROD_X para gravar (SB1)

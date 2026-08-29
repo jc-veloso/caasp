@@ -11,23 +11,12 @@ Static CFILPAD := "01001"
 User Function FATZZG01()
     Local cAliZZG  := GetNextAlias()
     Local cQry     := ""
-    Local cCod     := ""
-    Local cJson    := ""
-    Local cChvRef  := ""
-    Local cTipoPen := ""
-    Local cTipoNF  := ""
-    Local cErrMsg  := ""
-    Local nRecno   := 0
-    Local lOk      := .F.
-    Local nOk      := 0
-    Local nErr     := 0
-    Local jJson    := Nil
-    Local aRet     := {}
-    Local cTabPai  := ""
-    Local nTIni    := 0
 
     Private __cBatch := "1"
     Private lJob      := GetRemoteType() == -1
+    Private aFila      := {}
+    Private nOk        := 0
+    Private nErr       := 0
 
     ConOut("[FATZZG01] Iniciando Cliente/Fornecedor Pendente - " + DToS(Date()) + " " + Time())
 
@@ -44,13 +33,55 @@ User Function FATZZG01()
     DbUseArea(.T., "TOPCONN", TcGenQry(,, cQry), cAliZZG, .T., .T.)
 
     While (cAliZZG)->(!Eof())
-        cCod    := AllTrim((cAliZZG)->ZZG_COD)
-        cChvRef := AllTrim((cAliZZG)->ZZG_CHVREF)
-        cTipoPen:= AllTrim((cAliZZG)->ZZG_TIPOPE)
-        cTipoNF := AllTrim((cAliZZG)->ZZG_TIPONF)
-        nRecno  := (cAliZZG)->RECNO
+        aAdd(aFila, {AllTrim((cAliZZG)->ZZG_COD), AllTrim((cAliZZG)->ZZG_CHVREF), AllTrim((cAliZZG)->ZZG_TIPOPE), AllTrim((cAliZZG)->ZZG_TIPONF), (cAliZZG)->RECNO})
+        (cAliZZG)->(DbSkip())
+    EndDo
+    (cAliZZG)->(DbCloseArea())
+
+    If lJob
+        ZZG_ProcessaFila()
+    Else
+        Processa({|| ZZG_ProcessaFila()}, "FATZZG01", "Cadastrando Cliente/Fornecedor Pendente...")
+    EndIf
+
+    ConOut("[FATZZG01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
+    If lJob
+        RpcClearEnv()
+    EndIf
+Return
+
+// Percorre aFila (Private) cadastrando cada cliente/fornecedor pendente; nOk/nErr (Private) acumulam o resultado
+Static Function ZZG_ProcessaFila()
+    Local cCod     := ""
+    Local cJson    := ""
+    Local cChvRef  := ""
+    Local cTipoPen := ""
+    Local cTipoNF  := ""
+    Local cErrMsg  := ""
+    Local nRecno   := 0
+    Local lOk      := .F.
+    Local jJson    := Nil
+    Local aRet     := {}
+    Local cTabPai  := ""
+    Local nTIni    := 0
+    Local nJ       := 0
+
+    If !lJob
+        ProcRegua(Len(aFila))
+    EndIf
+
+    For nJ := 1 To Len(aFila)
+        cCod    := aFila[nJ][1]
+        cChvRef := aFila[nJ][2]
+        cTipoPen:= aFila[nJ][3]
+        cTipoNF := aFila[nJ][4]
+        nRecno  := aFila[nJ][5]
         cErrMsg := ""
         lOk     := .F.
+
+        If !lJob
+            IncProc("Ref " + cChvRef + " (" + cValToChar(nJ) + "/" + cValToChar(Len(aFila)) + ")")
+        EndIf
 
         DbSelectArea("ZZG")
         ZZG->(DbGoto(nRecno))
@@ -97,15 +128,7 @@ User Function FATZZG01()
 
             cTabPai := IIF(cTipoNF == "ZZ9", "ZZ9", "ZZD")
         EndIf
-
-        (cAliZZG)->(DbSkip())
-    EndDo
-    (cAliZZG)->(DbCloseArea())
-
-    ConOut("[FATZZG01] Fim. OK: " + cValToChar(nOk) + " | Erro: " + cValToChar(nErr))
-    If lJob
-        RpcClearEnv()
-    EndIf
+    Next nJ
 Return
 
 // Grava um cliente/fornecedor pendente na fila ZZG

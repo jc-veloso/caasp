@@ -128,7 +128,7 @@ Static Function ZZD_ProcessaFila()
                 cDocCb := IIF(Len(aRet) >= 5, cValToChar(aRet[5]), "")
                 cMsgSuc := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "")
             Else
-                cErrMsg := cValToChar(aRet[2])
+                cErrMsg := U_PI_CTX_X(cValToChar(aRet[2]), {{"Chave", cChvNFe}})
                 cTipoPen  := IIF(Len(aRet) >= 4 .And. aRet[4] == "PRD", "PRD", "")
                 cProdPend := IIF(cTipoPen == "PRD" .And. Len(aRet) >= 5, cValToChar(aRet[5]), "")
             EndIf

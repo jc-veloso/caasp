@@ -120,7 +120,7 @@ Static Function ZZ9_ProcessaFila()
                 cTabPai := IIF(Len(aRet) >= 3, aRet[3], "")
                 lDup    := IIF(Len(aRet) >= 4, aRet[4], .F.)
             Else
-                cErrMsg  := IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "Erro desconhecido na classificacao")
+                cErrMsg  := U_PI_CTX_X(IIF(Len(aRet) >= 2, cValToChar(aRet[2]), "Erro desconhecido na classificacao"), {{"Chave", cChvNFe}})
                 cSub     := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
                 cTipoPen  := IIF(Len(aRet) >= 4 .And. (aRet[4] == "CLI" .Or. aRet[4] == "FOR" .Or. aRet[4] == "PRD"), aRet[4], "")
                 cProdPend := IIF(cTipoPen == "PRD" .And. Len(aRet) >= 5, cValToChar(aRet[5]), "")

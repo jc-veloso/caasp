@@ -96,7 +96,7 @@ Static Function ZZE_ProcessaFila()
             aRet := ZZE_MotorRecibo(jJson)
             lOk  := aRet[1]
             cSub := IIF(Len(aRet) >= 3, cValToChar(aRet[3]), "")
-            If !lOk ; cErrMsg := cValToChar(aRet[2]) ; EndIf
+            If !lOk ; cErrMsg := U_PI_CTX_X(cValToChar(aRet[2]), {{"Recibo", cCodRcb}}) ; EndIf
         Else
             cErrMsg := "JSON invalido na fila ZZE. COD: " + cCod
         EndIf

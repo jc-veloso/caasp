@@ -313,6 +313,19 @@ Static Function BuscaCad(cCad,nOpc)
 
 Return lRet
 
+// Anexa contexto de identificacao a uma mensagem de erro, no formato padrao "<msg> | Label: valor | Label2: valor2"
+// aCtx: array de pares {"Label", valor} - pares com valor vazio sao omitidos
+User Function PI_CTX_X(cMsg, aCtx)
+    Local nI   := 0
+    Local cCtx := ""
+
+    For nI := 1 To Len(aCtx)
+        If !Empty(aCtx[nI][2])
+            cCtx += " | " + aCtx[nI][1] + ": " + AllTrim(cValToChar(aCtx[nI][2]))
+        EndIf
+    Next nI
+Return cMsg + cCtx
+
 // Monta uma mensagem legivel a partir do retorno de oModel:GetErrorMessage() (string ou array de 9 posicoes)
 Static Function MontaErroModel(uErro)
 	Local cMsg   := ""
@@ -418,11 +431,11 @@ User Function PI_CLI_X(oJson)
                 aRet := {.T., "Cliente cadastrado: " + cProxCod, cProxCod}
             Else
                 RollBackSX8()
-                aRet := {.F., MontaErroModel(oModel:GetErrorMessage()), ""}
+                aRet := {.F., U_PI_CTX_X(MontaErroModel(oModel:GetErrorMessage()), {{"Cliente", U_PI_STR_X(oJson, "nome")}, {"Doc", U_PI_STR_X(oJson, "cpf")}, {"UF", cEstAux}, {"Municipio", U_PI_STR_X(oJson, "municipio")}}), ""}
             EndIf
         Else
             RollBackSX8()
-            aRet := {.F., MontaErroModel(oModel:GetErrorMessage()), ""}
+            aRet := {.F., U_PI_CTX_X(MontaErroModel(oModel:GetErrorMessage()), {{"Cliente", U_PI_STR_X(oJson, "nome")}, {"Doc", U_PI_STR_X(oJson, "cpf")}, {"UF", cEstAux}, {"Municipio", U_PI_STR_X(oJson, "municipio")}}), ""}
         EndIf
 
         If oModel != Nil
@@ -436,10 +449,10 @@ User Function PI_CLI_X(oJson)
     ErrorBlock(bErrBlock)
 
     If !Empty(cErrorMsg) .And. !aRet[1]
-        aRet := {.F., cErrorMsg, ""}
+        aRet := {.F., U_PI_CTX_X(cErrorMsg, {{"Cliente", U_PI_STR_X(oJson, "nome")}, {"Doc", U_PI_STR_X(oJson, "cpf")}, {"UF", cEstAux}, {"Municipio", U_PI_STR_X(oJson, "municipio")}}), ""}
     EndIf
 
-Return aRet
+Return(aRet)
 
 // Upsert de fornecedor (SA2) via MVC (MATA020) - insert ou update por CNPJ
 User Function PI_FORN_X(jItem)
@@ -457,7 +470,7 @@ User Function PI_FORN_X(jItem)
     cMun  := AllTrim(cValToChar(jItem['nom_Municipio']))
 
     If Empty(cMun)
-        Return {.F., "O campo Municipio (nom_Municipio) e obrigatorio e nao foi preenchido.", ""}
+        Return {.F., U_PI_CTX_X("O campo Municipio (nom_Municipio) e obrigatorio e nao foi preenchido.", {{"Fornecedor", cValToChar(jItem["nom_Fornecedor"])}, {"Doc", cCNPJ}, {"UF", cValToChar(jItem["cod_UF"])}}), ""}
     EndIf
 
     DbSelectArea("SA2")
@@ -506,10 +519,10 @@ User Function PI_FORN_X(jItem)
         If oModel:CommitData()
             aRet := {.T., "Fornecedor incluido com sucesso: " + cProxCod, cProxCod}
         Else
-            aRet := {.F., MontaErroModel(oModel:GetErrorMessage()), ""}
+            aRet := {.F., U_PI_CTX_X(MontaErroModel(oModel:GetErrorMessage()), {{"Fornecedor", cValToChar(jItem["nom_Fornecedor"])}, {"Doc", cCNPJ}, {"UF", cValToChar(jItem["cod_UF"])}, {"Municipio", cMun}}), ""}
         EndIf
     Else
-        aRet := {.F., MontaErroModel(oModel:GetErrorMessage()), ""}
+        aRet := {.F., U_PI_CTX_X(MontaErroModel(oModel:GetErrorMessage()), {{"Fornecedor", cValToChar(jItem["nom_Fornecedor"])}, {"Doc", cCNPJ}, {"UF", cValToChar(jItem["cod_UF"])}, {"Municipio", cMun}}), ""}
     EndIf
 
     oModel:DeActivate()

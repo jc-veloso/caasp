@@ -87,7 +87,7 @@ Static Function ZZF_ProcessaFila()
         aRet  := ZZF_CADPRD(cCodLeg)
         ConOut("[TIMING][FATZZF01] ZZF_CADPRD: " + cValToChar(Seconds() - nTIni) + "s | " + cCodLeg)
         lOk  := aRet[1]
-        If !lOk ; cErrMsg := cValToChar(aRet[2]) ; EndIf
+        If !lOk ; cErrMsg := U_PI_CTX_X(cValToChar(aRet[2]), {{"Produto", cCodLeg}, {"Ref", cChvRef}}) ; EndIf
 
         If lOk
             U_UPDSTAT("ZZF", cCod, "S", "")

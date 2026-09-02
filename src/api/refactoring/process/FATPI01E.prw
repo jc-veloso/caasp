@@ -867,7 +867,7 @@ User Function PI_GER_E2(cDoc, cSer, cForn, cLoja, aPrd, oHead, cTab, nRecno)
 			SE2->E2_VENCTO  := dVencP
 			SE2->E2_VENCREA := dVencP
 			SE2->E2_VALOR   := nVlrP
-			SE2->E2_VALLIQ  := nVlrP
+//			SE2->E2_VALLIQ  := nVlrP
 			SE2->E2_SALDO   := nVlrP
 			SE2->E2_VLCRUZ  := nVlrP
 			SE2->E2_MOEDA   := 1

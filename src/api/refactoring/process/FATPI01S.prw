@@ -530,7 +530,7 @@ Static Function JSON_VENDA(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab)
 
 		cQrySE1 += "E1_VALOR = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
 		cQrySE1 += "E1_SALDO = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
-		cQrySE1 += "E1_VALLIQ = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
+//		cQrySE1 += "E1_VALLIQ = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
 		cQrySE1 += "E1_VLCRUZ = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
 
 		If !Empty(cFormaTrat)
@@ -1086,7 +1086,7 @@ Static Function FZ_GER_E1(cDoc, cSer, cCli, cLoja, aPrd, oHead, cTab, nRecno)
 				SE1->E1_VENCTO  := dVencP
 				SE1->E1_VENCREA := dVencP
 				SE1->E1_VALOR   := nVlrP
-				SE1->E1_VALLIQ  := nVlrP
+//				SE1->E1_VALLIQ  := nVlrP
 				SE1->E1_SALDO   := nVlrP
 				SE1->E1_VLCRUZ  := nVlrP
 				SE1->E1_CCUSTO  := cCusto

@@ -547,7 +547,7 @@ User Function FATPI08NF(oData, cFilDest)
 													SE1->E1_VENCTO  := dVenc
 													SE1->E1_VENCREA := dVenc
 													SE1->E1_VALOR   := nVlrTitulo
-													SE1->E1_VALLIQ  := nVlrTitulo
+//													SE1->E1_VALLIQ  := nVlrTitulo
 													SE1->E1_SALDO   := nVlrTitulo
 													SE1->E1_VLCRUZ  := nVlrTitulo
 													SE1->E1_CCUSTO  := PadR(cCCItm, TamSx3("E1_CCUSTO")[1])
@@ -589,7 +589,7 @@ User Function FATPI08NF(oData, cFilDest)
 													cQrySE1 += "E1_XEVENTO = '" + PadR(cDesOrig, TamSx3("E1_XEVENTO")[1]) + "', "
 													cQrySE1 += "E1_VALOR = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
 													cQrySE1 += "E1_SALDO = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
-													cQrySE1 += "E1_VALLIQ = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
+//													cQrySE1 += "E1_VALLIQ = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
 													cQrySE1 += "E1_VLCRUZ = " + StrTran(cValToChar(nVlrTitulo), ",", ".") + ", "
 													cQrySE1 += "E1_HIST = '" + Left(cHistPad, TamSx3("E1_HIST")[1]) + "', "
 

@@ -67,12 +67,12 @@ WSMETHOD POST WSRECEIVE WSSERVICE FATPI01_V2
 		cIdIpaas := AllTrim(U_PI_STR_X(oHead, 'id_Ipaas')) // id do envelope iPaaS, cabecalho ou raiz
 		If Empty(cIdIpaas) ; cIdIpaas := AllTrim(U_PI_STR_X(jJson, 'id_Ipaas')) ; EndIf
 
-		If cModDoc == "65"
+		If cModDoc != "55"
 			nStat := 200
 			jRes['status']    := nStat
 			jRes['resultado'] := "Falha"
 			jRes['erro']      := "ModeloIncorreto"
-			jRes['mensagem']  := "FATPI01_V2 aceita apenas NFe (modelo 55). NFCe deve ser enviada para /fatpi09/v2."
+			jRes['mensagem']  := "FATPI01_V2 aceita apenas NFe (modelo 55). Modelo enviado: " + cModDoc
 
 			Self:setStatus(nStat)
 			Self:SetResponse(EncodeUTF8(jRes:toJSON()))

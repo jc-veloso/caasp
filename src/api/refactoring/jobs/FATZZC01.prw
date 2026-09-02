@@ -72,6 +72,7 @@ Static Function ZZC_DisparaFila()
     Local cAliCheck := ""
     Local cQryCheck := ""
     Local cThrDtOri := ""
+    Local uStartRet := Nil
 
     If !lJob
         ProcRegua(Len(aFila))
@@ -122,10 +123,11 @@ Static Function ZZC_DisparaFila()
             Sleep(1000)
         EndDo
 
-        StartJob("U_PI_ENTTH", GetEnvServer(), .F., cCod, cChvNFe, cJson)
+        uStartRet := StartJob("U_PI_ENTTH", GetEnvServer(), .F., cCod, cChvNFe, cJson)
 //        U_PI_ENTTH(cCod, cChvNFe, cJson)
         nDisparadas++
-        ConOut("[FATZZC01] Disparada: " + cCod + " | Chave: " + cChvNFe)
+        // [DIAG-STARTJOB] retorno de StartJob ainda nao usado para decisao - so observacao, ate confirmar o comportamento real neste ambiente
+        ConOut("[FATZZC01] Disparada: " + cCod + " | Chave: " + cChvNFe + " | StartJob retorno (" + ValType(uStartRet) + "): " + IIF(uStartRet == Nil, "Nil", cValToChar(uStartRet)))
     Next nJ
 Return
 
@@ -178,6 +180,10 @@ User Function PI_ENTTH(cCod, cChvNFe, cJson)
     Local oErrRT   := Nil
 
     Private __cBatch := "1"
+
+    // [DIAG-STARTJOB] log incondicional de entrada - se uma nota travar em 'A' sem esta linha no log,
+    // o StartJob nao chegou a lancar a thread; se aparecer, a thread iniciou e morreu antes de terminar
+    ConOut("[PI_ENTTH] Iniciando: " + cCod + " | Chave: " + cChvNFe)
 
     RpcSetEnv(CEMPPAD, CFILPAD, Nil, Nil, "FAT")
 

@@ -175,13 +175,15 @@ Indexes:
 
 `SM0` (companies/branches), `SA1`/`SA2` (customers/suppliers), `SB1`/`SB2` (products/stock), `SC7` (purchase orders), `SD1`/`SD2`/`SF1`/`SF2`/`SF3`/`SFT` (NF detail/header/aux), `SF4` (TES lookup by CFOP), `SE1`/`SE2` (AR/AP titles — note custom field `E2_XDESCON`), `SX3`/`SX5`/`SX6` (dictionary/config), `SL1`/`SLR`/`SL4` (SIGALOJA budget/quote for NFC-e).
 
-### `src/fin/`, `src/com/` — other CAASP-client projects, unrelated to this REST integration
+### `src/fin/`, `src/com/`, `src/atf/` — other CAASP-client projects, unrelated to this REST integration
 
 `src/` was reorganized (08/2026) to hold multiple separate projects for the CAASP client side by side; only `src/api/` is this REST integration.
 
 `src/fin/pe/F150SUM.prw` (folder renamed from `ponto de entrada` during the reorg — same file, no content change) is a Protheus *ponto de entrada* (point-of-entry hook) for the `F150` batch title-settlement routine, computing net balance from `SE2` including the custom `E2_XDESCON` discount field. `src/fin/conciliador/` (10 `.PRW` files: `F070EST`, `ZACCONCIL`, `ZACCONTAS`, `ZACFIN40`, `ZACLOG`, `ZACLOTE`, `ZACVALID`, `ZAC_EEFD`, `ZAC_EEFI`, `ZAC_PIX`) is a bank-reconciliation module, added in the same reorg — not otherwise documented here, out of scope.
 
 `src/com/` is a distinct CAASP-client project (`convenio_oab`, plus a `pe/` folder). `src/com/pe/MT103FIN.prw` — a MATA103 point-of-entry validating `E2_HIST`/`E2_FORMPAG` on SE2 duplicatas, under investigation (2026-08) as a possible cause of `FATZZC01`/`PI_ENTTH` hanging when it fires headless inside the async job — lives here, **not** under `src/api/refactoring/jobs/`, despite being committed there briefly before the reorg; it's not part of this REST integration's compile order, and any fix belongs in `src/com/`, not here.
+
+`src/atf/` is a distinct CAASP-client project (fixed-assets/patrimônio, "ATF"), not otherwise documented here, out of scope for this REST integration. `src/atf/ATFTR02.prw` is a standalone MVC browse (`WSRESTFUL`-free, pure AdvPL/FWMBrowse) for batch asset write-off and inter-branch transfer, driving `ATFA036`/`ATFA060` via `MSExecAuto` — unrelated to the `ZZ*`/`FATZZ*`/`FATPI*` flow.
 
 ## Known open issues (check before touching related code)
 

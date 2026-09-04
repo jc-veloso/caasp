@@ -1356,24 +1356,14 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     Local cCCDes
     Local cFilDes
     Local cItemBem
-    // Local cNroLote // Nao utilizada - so alimentava linha de regravacao ja comentada.
     Local dDataInc
-    // Local cTipoOp  // Nao utilizada - so alimentava linha de regravacao ja comentada.
     Local cChapa
-    // Local cDescri  // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // Local cMotivo  // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // Local dBaixa   // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // Local cDeprec  // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // Local nPerbai  // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // Local nCusBem  // Nao utilizada - so alimentava linha de regravacao ja comentada.
     Local aArea
     Local aErroLog
     Local nI
     Local oErr
     Local lFound
     Local cFilBkp
-    // Local aSN1 // Nao utilizada - so referenciada dentro do bloco ja comentado (SN1/SN3).
-    // Local aSN3 // Nao utilizada - so referenciada dentro do bloco ja comentado (SN1/SN3).
     Local aParamAuto
     Local dDataBkp
     Local cFullErro
@@ -1386,8 +1376,6 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     oErr       := Nil
     lFound     := .F.
     cFilBkp    := cFilAnt
-    // aSN1       := {} // Nao utilizada - so referenciada dentro do bloco ja comentado (SN1/SN3).
-    // aSN3       := {} // Nao utilizada - so referenciada dentro do bloco ja comentado (SN1/SN3).
 
     Private lMsHelpAuto    := .F.
     Private lAutoErrNoFile := .T.
@@ -1403,23 +1391,15 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     cCCOri   := AllTrim(SZ6->Z6_CCORIG)
     cCCDes   := AllTrim(SZ6->Z6_CCDEST)
     cFilDes  := AllTrim(SZ6->Z6_FILDES)
-    
-    // cNroLote := SZ6->Z6_NUMLOT // Nao utilizada - so alimentava linha de regravacao ja comentada.
+
     dDataInc := SZ6->Z6_DATAINC
-    // cTipoOp  := SZ6->Z6_TIPOOP // Nao utilizada - so alimentava linha de regravacao ja comentada.
     cChapa   := AllTrim(SZ6->Z6_CHAPA)
 
     // Sem data de processamento valida informada, mantem o comportamento original (usa a data do lote)
     If ValType(dDataProc) != "D" .Or. Empty(dDataProc)
         dDataProc := dDataInc
     EndIf
-    // cDescri  := SZ6->Z6_DESCRI // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // cMotivo  := SZ6->Z6_MOTIVO // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // nPerbai  := SZ6->Z6_PERBAI // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // dBaixa   := SZ6->Z6_BAIXA  // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // cDeprec  := IF(SZ6->(FieldPos("Z6_DEPREC")) > 0, SZ6->Z6_DEPREC, "") // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // nCusBem  := IF(SZ6->(FieldPos("Z6_CUSTBEM")) > 0, SZ6->Z6_CUSTBEM, 0) // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    
+
     cItemBem := ""
     If SZ6->(FieldPos("Z6_ITEM")) > 0
         cItemBem := AllTrim(SZ6->Z6_ITEM)
@@ -1475,32 +1455,22 @@ User Function ATFT0216(nRec, dDataProc, aLog)
         Return lRet
     EndIf
     
-    // For nI := 1 To SN1->(FCount()) // Nao utilizada - so referenciada dentro do bloco ja comentado (SN1/SN3).
-    //     AAdd(aSN1, SN1->(FieldGet(nI)))
-    // Next
-
-    // For nI := 1 To SN3->(FCount()) // Nao utilizada - so referenciada dentro do bloco ja comentado (SN1/SN3).
-    //     AAdd(aSN3, SN3->(FieldGet(nI)))
-    // Next
-
     AAdd(aDadosAuto, {"N3_CBASE"  , SN3->N3_CBASE  , Nil})
     AAdd(aDadosAuto, {"N3_ITEM"   , SN3->N3_ITEM   , Nil})
     AAdd(aDadosAuto, {"N3_TIPO"   , SN3->N3_TIPO   , Nil})
-    
-//    If cFilDes <> cFilAux
-        AAdd(aDadosAuto, {"N1_FILIAL" , PadR(cFilDes, TamSX3("N1_FILIAL")[1]) , Nil})
-//    EndIf
-    
+    AAdd(aDadosAuto, {"N1_FILIAL" , PadR(cFilDes, TamSX3("N1_FILIAL")[1]) , Nil})
     AAdd(aDadosAuto, {"N4_DATA"   , dDataProc      , Nil})
-    AAdd(aDadosAuto, {"N3_CCUSTO" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1])  , Nil})
     AAdd(aDadosAuto, {"N3_CCONTAB", SN3->N3_CCONTAB, Nil})
     AAdd(aDadosAuto, {"N3_CCORREC", SN3->N3_CCORREC, Nil})
     AAdd(aDadosAuto, {"N3_CDEPREC", SN3->N3_CDEPREC, Nil})
     AAdd(aDadosAuto, {"N3_CCDEPR" , SN3->N3_CCDEPR , Nil})
     AAdd(aDadosAuto, {"N3_CDESP"  , SN3->N3_CDESP  , Nil})
+    AAdd(aDadosAuto, {"N3_CCUSTO" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
     AAdd(aDadosAuto, {"N3_CUSTBEM", PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
     AAdd(aDadosAuto, {"N3_CCDESP" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
-    AAdd(aDadosAuto, {"N3_CCCDEP" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]) , Nil})
+    AAdd(aDadosAuto, {"N3_CCCDEP" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
+    AAdd(aDadosAuto, {"N3_CCCDES" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
+    AAdd(aDadosAuto, {"N3_CCCORR" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
 
     AAdd(aParamAuto, {"MV_PAR01", 1}) 
     AAdd(aParamAuto, {"MV_PAR02", 2}) 
@@ -1569,104 +1539,9 @@ User Function ATFT0216(nRec, dDataProc, aLog)
             SZ6->(DbGoto(nRec))
             SZ6->(RecLock("SZ6", .F.))
             SZ6->Z6_STATUS := "TRAN"
-
-            // SZ6->Z6_FILIAL  := xFilial("SZ6") // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_NUMLOT  := cNroLote        // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_DATAINC := dDataInc        // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_TIPOOP  := cTipoOp         // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_CBASE   := cCBase          // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_CHAPA   := cChapa          // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_DESCRI  := cDescri         // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_MOTIVO  := cMotivo         // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_PERBAI  := nPerbai         // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_BAIXA   := dBaixa          // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_FILORI  := cFilAux         // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_CCORIG  := cCCOri          // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_FILDES  := cFilDes         // Nao deve regravar dados digitados pelo usuario.
-            // SZ6->Z6_CCDEST  := cCCDes          // Nao deve regravar dados digitados pelo usuario.
-
-            //If SZ6->(FieldPos("Z6_DEPREC")) > 0
-                // SZ6->Z6_DEPREC := cDeprec // Nao deve regravar dados digitados pelo usuario.
-            //EndIf
-            //If SZ6->(FieldPos("Z6_CUSTBEM")) > 0
-                // SZ6->Z6_CUSTBEM := nCusBem // Nao deve regravar dados digitados pelo usuario.
-            //EndIf
-            If SZ6->(FieldPos("Z6_DTPROC")) > 0
-                SZ6->Z6_DTPROC := dDataProc
-            EndIf
-
-            //SZ6->Z6_STATUS  := "DEST"
+            SZ6->Z6_DTPROC := dDataProc
             SZ6->(MsUnLock())
 
-            // DbSelectArea("SN1") // Nao deve gravar manualmente em SN1 apos o ATFA060 - o ExecAuto ja deve fazer tudo que for necessario.
-            // If SN1->(DbSeek(cFilAux + SN3->N3_CBASE + SN3->N3_ITEM))
-            //     RecLock("SN1", .F.)
-            //     SN1->N1_STATUS := '4'
-            //     SN1->(MsUnLock())
-            // EndIf
-            
-//            If cFilDes <> cFilAux
-//                cFilAnt := cFilDes
-                
-                /*DbSelectArea("SN1")
-                If !SN1->(DbSeek(xFilial("SN1") + aSN1[SN1->(FieldPos("N1_CBASE"))] + aSN1[SN1->(FieldPos("N1_ITEM"))]))
-                    RecLock("SN1", .T.)
-                    For nI := 1 To SN1->(FCount())
-                        SN1->(FieldPut(nI, aSN1[nI]))
-                    Next
-                    SN1->N1_FILIAL := xFilial("SN1")
-                    SN1->N1_STATUS := "1" 
-                    SN1->N1_BAIXA  := CTOD("") 
-                    MsUnLock()
-                Else
-                    RecLock("SN1", .F.)
-                    SN1->N1_STATUS := "1"
-                    SN1->N1_BAIXA  := CTOD("")
-                    MsUnLock()
-                EndIf
-                
-                DbSelectArea("SN3")
-                If !SN3->(DbSeek(xFilial("SN3") + aSN3[SN3->(FieldPos("N3_CBASE"))] + aSN3[SN3->(FieldPos("N3_ITEM"))] + aSN3[SN3->(FieldPos("N3_TIPO"))] + "0" + aSN3[SN3->(FieldPos("N3_SEQ"))]))
-                    RecLock("SN3", .T.)
-                    For nI := 1 To SN3->(FCount())
-                        SN3->(FieldPut(nI, aSN3[nI]))
-                    Next
-                    SN3->N3_FILIAL := xFilial("SN3")
-                    SN3->N3_BAIXA  := "0" 
-                    MsUnLock()
-                EndIf*/
-                
-                // RecLock("SZ6", .T.)
-                // SZ6->Z6_FILIAL  := xFilial("SZ6") // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_NUMLOT  := cNroLote        // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_DATAINC := dDataInc        // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_TIPOOP  := cTipoOp         // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_CBASE   := cCBase          // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_CHAPA   := cChapa          // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_DESCRI  := cDescri         // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_MOTIVO  := cMotivo         // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_PERBAI  := nPerbai         // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_BAIXA   := dBaixa          // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_FILORI  := cFilAux         // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_CCORIG  := cCCOri          // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_FILDES  := cFilDes         // Nao deve regravar dados digitados pelo usuario.
-                // SZ6->Z6_CCDEST  := cCCDes          // Nao deve regravar dados digitados pelo usuario.
-
-                //If SZ6->(FieldPos("Z6_DEPREC")) > 0
-                    // SZ6->Z6_DEPREC := cDeprec // Nao deve regravar dados digitados pelo usuario.
-                //EndIf
-                //If SZ6->(FieldPos("Z6_CUSTBEM")) > 0
-                    // SZ6->Z6_CUSTBEM := nCusBem // Nao deve regravar dados digitados pelo usuario.
-                //EndIf
-//                If SZ6->(FieldPos("Z6_DTPROC")) > 0
-//                    SZ6->Z6_DTPROC := dDataProc
-//                EndIf
-
-//                SZ6->Z6_STATUS  := "DEST" 
-//                SZ6->(MsUnLock())
-                
-//                cFilAnt := cFilBkp
-//            EndIf
         EndIf
         
     Recover Using oErr

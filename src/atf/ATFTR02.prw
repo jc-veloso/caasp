@@ -137,7 +137,7 @@ Static Function ModelDef()
     // Plaqueta dita a regra de unicidade da linha
     oModel:GetModel("SZ6DETAIL"):SetUniqueLine({"Z6_CHAPA"})
     
-    // Regras de Tela (Master) - TODAS AS EXPRESSOES S�O STRINGS (C)
+    // Regras de Tela (Master) - TODAS AS EXPRESSOES SAO STRINGS (C)
     If oStructEnchoice:HasField("Z6_NUMLOT")
         oStructEnchoice:SetProperty("Z6_NUMLOT", MODEL_FIELD_INIT, FWBuildFeature(STRUCT_FEATURE_INIPAD, "U_ATFT0205()"))
         oStructEnchoice:SetProperty("Z6_NUMLOT", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, "U_ATFT0204()"))
@@ -166,6 +166,9 @@ Static Function ModelDef()
     If oStructGrid:HasField("Z6_CBASE")
         oStructGrid:SetProperty("Z6_CBASE", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F."))
     EndIf
+    If oStructGrid:HasField("Z6_ITEM")
+        oStructGrid:SetProperty("Z6_ITEM", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F."))
+    EndIf
     If oStructGrid:HasField("Z6_DESCRI")
         oStructGrid:SetProperty("Z6_DESCRI", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F."))
     EndIf
@@ -190,10 +193,13 @@ Static Function ModelDef()
         oStructGrid:SetProperty("Z6_FILORI", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F.")) 
     EndIf
     If oStructGrid:HasField("Z6_CCORIG")
-        oStructGrid:SetProperty("Z6_CCORIG", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".T.")) 
+        oStructGrid:SetProperty("Z6_CCORIG", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F."))
     EndIf
     If oStructGrid:HasField("Z6_CUSTBEM")
-        oStructGrid:SetProperty("Z6_CUSTBEM", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F.")) 
+        oStructGrid:SetProperty("Z6_CUSTBEM", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F."))
+    EndIf
+    If oStructGrid:HasField("Z6_DTPROC")
+        oStructGrid:SetProperty("Z6_DTPROC", MODEL_FIELD_WHEN, FWBuildFeature(STRUCT_FEATURE_WHEN, ".F."))
     EndIf
     
     // Regras de Transferencia (Destino - Liberados apenas na operacao 2)
@@ -255,6 +261,32 @@ Converte uma data em um valor comparavel de mes/ano (Ano*12+Mes)
 /*/
 Static Function ATF_MESANO(dData)
 Return (Year(dData) * 12) + Month(dData)
+
+/*/{Protheus.doc} ATF_DESCSTATUS
+Descricao do N1_STATUS (SN1)
+@type Static Function
+@author Antonio Nunes O Jr
+@since 27/08/2026
+/*/
+Static Function ATF_DESCSTATUS(cStatus)
+    Local cDesc
+
+    Do Case
+        Case cStatus == "0"
+            cDesc := "Pendente de Classificacao"
+        Case cStatus == "1"
+            cDesc := "Em Uso"
+        Case cStatus == "2"
+            cDesc := "Bloqueado por Usuario"
+        Case cStatus == "3"
+            cDesc := "Bloqueado por Local"
+        Case cStatus == "4"
+            cDesc := "Transferencia entre Filiais"
+        OtherWise
+            cDesc := "Nao classificado"
+    EndCase
+
+Return cDesc
 
 /*/{Protheus.doc} ATFT0202
 Pos-validacao do modelo (Usado para forcar alteracao no cabecalho na Inclusao)
@@ -403,7 +435,7 @@ User Function ATFT0209()
                     cChave3 := cFilAux + PadR(AllTrim(cLote), FWTamSX3("Z6_NUMLOT")[1]) + DToS(dData) + PadR(AllTrim(cTipo), FWTamSX3("Z6_TIPOOP")[1])
                     
                     If SZ6->(DbSeek(cChave3))
-                        MsgAlert("Atencao: A combinacao de Lote (" + AllTrim(cLote) + "), Data (" + DToS(dData) + ") e Operacao (" + AllTrim(cTipo) + ") ja existe! Digite outra para seguir.", "Aviso")
+                        MsgAlert("Atencao: A combinacao de Lote (" + AllTrim(cLote) + "), Data (" + DToC(dData) + ") e Operacao (" + AllTrim(cTipo) + ") ja existe! Digite outra para seguir.", "Aviso")
                         lRet := .F.
                     EndIf
                 EndIf
@@ -448,11 +480,11 @@ User Function ATFT0217()
                     nCompUlt := ATF_MESANO(dUltDepr)
 
                     If nCompInc <= nCompUlt
-                        cMsg := "A data de inclusao (" + DToS(dDataInc) + ") nao pode ser do mesmo mes ou anterior ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToS(dUltDepr) + ")."
+                        cMsg := "A data de inclusao (" + DToC(dDataInc) + ") nao pode ser do mesmo mes ou anterior ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToC(dUltDepr) + ")."
                         MsgAlert(cMsg, "Data Invalida")
                         lRet := .F.
                     ElseIf nCompInc > (nCompUlt + 1)
-                        cMsg := "A data de inclusao (" + DToS(dDataInc) + ") nao esta no mes imediatamente seguinte ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToS(dUltDepr) + ")." + CRLF + "Deseja confirmar mesmo assim?"
+                        cMsg := "A data de inclusao (" + DToC(dDataInc) + ") nao esta no mes imediatamente seguinte ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToC(dUltDepr) + ")." + CRLF + "Deseja confirmar mesmo assim?"
                         lRet := MsgYesNo(cMsg, "Atencao - Data de Inclusao")
                     EndIf
                 EndIf
@@ -523,20 +555,25 @@ User Function ATFT0210(oGrid)
         EndIf
     EndIf
     
-    If ValType(cTipo) == "C" .And. cTipo == OP_TRANSF 
+    If ValType(cTipo) == "C" .And. cTipo == OP_TRANSF
         If oStruct:HasField("Z6_FILDES") .And. Empty(AllTrim(oGrid:GetValue("Z6_FILDES")))
             Help("", 1, "VALID", "", "Filial de Destino obrigatoria na Transferencia.", 1, 0)
             lRet := .F.
-        Else
-            If oStruct:HasField("Z6_FILORI") .And. oGrid:GetValue("Z6_FILORI") == oGrid:GetValue("Z6_FILDES")
-                Help("", 1, "VALID", "", "A Filial de Destino deve ser diferente da Filial de Origem para Transferencia.", 1, 0)
-                lRet := .F.
-            EndIf
         EndIf
-        
+
         If oStruct:HasField("Z6_CCDEST") .And. Empty(AllTrim(oGrid:GetValue("Z6_CCDEST")))
             Help("", 1, "VALID", "", "Centro de Custo de Destino obrigatorio na Transferencia.", 1, 0)
             lRet := .F.
+        EndIf
+
+        // Filial de Destino e Centro de Custo de Destino podem repetir a origem, mas ao menos um dos dois precisa ser diferente.
+        If lRet .And. oStruct:HasField("Z6_FILORI") .And. oStruct:HasField("Z6_FILDES") .And. ;
+           oStruct:HasField("Z6_CCORIG") .And. oStruct:HasField("Z6_CCDEST")
+            If oGrid:GetValue("Z6_FILORI") == oGrid:GetValue("Z6_FILDES") .And. ;
+               AllTrim(oGrid:GetValue("Z6_CCORIG")) == AllTrim(oGrid:GetValue("Z6_CCDEST"))
+                Help("", 1, "VALID", "", "A Filial de Destino ou o Centro de Custo de Destino deve ser diferente da origem.", 1, 0)
+                lRet := .F.
+            EndIf
         EndIf
     EndIf
 
@@ -551,15 +588,17 @@ User Function ATFT0211()
     Local lRet
     Local oModel
     Local oGrid
-    Local oCab
+    // Local oCab      // Nao utilizada - checagem agora usa N1_BAIXA, nao depende mais do tipo de operacao.
     Local cChapa
     Local cCBase
     Local aDados
-    Local cTipoAtual
+    // Local cTipoAtual // Nao utilizada - checagem agora usa N1_BAIXA, nao depende mais do tipo de operacao.
     Local aAreaSN1
-    
+    Local cStatusBem
+    Local cItemBem
+
     lRet       := .T.
-    cTipoAtual := ""
+    // cTipoAtual := ""
     oModel     := FWModelActive()
     oGrid      := oModel:GetModel("SZ6DETAIL")
     
@@ -580,54 +619,73 @@ User Function ATFT0211()
         SN1->(DbSetOrder(2)) 
         
         If SN1->(DbSeek(xFilial("SN1") + PadR(cChapa, TamSX3("N1_CHAPA")[1])))
-            cCBase := SN1->N1_CBASE
+            cCBase     := SN1->N1_CBASE
+            cItemBem   := SN1->N1_ITEM
+            cStatusBem := AllTrim(SN1->N1_STATUS)
         Else
-            cCBase := ""
+            cCBase     := ""
+            cItemBem   := ""
+            cStatusBem := ""
         EndIf
         RestArea(aAreaSN1)
-        
+
         If Empty(cCBase)
             MsgAlert("Plaqueta '" + cChapa + "' invalida ou nao encontrada.", "Validacao")
             lRet := .F.
-            
+
             If oGrid:GetStruct():HasField("Z6_CBASE")  ; oGrid:LoadValue("Z6_CBASE", "")   ; EndIf
+            If oGrid:GetStruct():HasField("Z6_ITEM")   ; oGrid:LoadValue("Z6_ITEM", "")    ; EndIf
             If oGrid:GetStruct():HasField("Z6_DESCRI") ; oGrid:LoadValue("Z6_DESCRI", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_FILORI") ; oGrid:LoadValue("Z6_FILORI", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_CCORIG") ; oGrid:LoadValue("Z6_CCORIG", "")  ; EndIf
+            If oGrid:GetStruct():HasField("Z6_FILDES") ; oGrid:LoadValue("Z6_FILDES", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_CCDEST") ; oGrid:LoadValue("Z6_CCDEST", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_CUSTBEM"); oGrid:LoadValue("Z6_CUSTBEM", 0)  ; EndIf
             Return lRet
         EndIf
-        
+
+        // Baseado no que o usuario efetivamente digitou (Chapa -> registro SN1 encontrado acima), nao mais re-derivado via SN3.
+        If cStatusBem != "1"
+            MsgAlert("Bem indisponivel para baixa/transferencia. Status: " + cStatusBem + " - " + ATF_DESCSTATUS(cStatusBem), "Atencao")
+            Return .F.
+        EndIf
+
         aDados := oGerenciador:ObtBem(cCBase)
         
         If Len(aDados) == 0
-            MsgAlert("Bem da Plaqueta '" + cChapa + "' invalido, nao encontrado na SN3 ou ja baixado totalmente.", "Validacao")
+            MsgAlert("Bem da Plaqueta '" + cChapa + "' invalido, pode ter sido transferido ou ja baixado totalmente na filial corrente.", "Validacao")
             lRet := .F.
             
             If oGrid:GetStruct():HasField("Z6_CBASE")  ; oGrid:LoadValue("Z6_CBASE", "")   ; EndIf
+            If oGrid:GetStruct():HasField("Z6_ITEM")   ; oGrid:LoadValue("Z6_ITEM", "")    ; EndIf
             If oGrid:GetStruct():HasField("Z6_DESCRI") ; oGrid:LoadValue("Z6_DESCRI", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_FILORI") ; oGrid:LoadValue("Z6_FILORI", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_CCORIG") ; oGrid:LoadValue("Z6_CCORIG", "")  ; EndIf
+            If oGrid:GetStruct():HasField("Z6_FILDES") ; oGrid:LoadValue("Z6_FILDES", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_CCDEST") ; oGrid:LoadValue("Z6_CCDEST", "")  ; EndIf
             If oGrid:GetStruct():HasField("Z6_CUSTBEM"); oGrid:LoadValue("Z6_CUSTBEM", 0)  ; EndIf
         Else
-            oCab := oModel:GetModel("SZ6MASTER")
-            If ValType(oCab) == "O"
-                cTipoAtual := oCab:GetValue("Z6_TIPOOP")
-            EndIf
-            
-            DbSelectArea("SN1")
-            SN1->(DbSetOrder(1))
-            If SN1->(DbSeek(xFilial("SN1") + aDados[1] + aDados[4]))
-                If AllTrim(SN1->N1_STATUS) == '4' .And. cTipoAtual == OP_TRANSF
-                    MsgAlert("Este bem ja foi transferido (Status 4) e nao pode ser transferido novamente.", "Atencao")
-                    Return .F.
-                EndIf
-            EndIf
-            
+            // oCab := oModel:GetModel("SZ6MASTER") // Nao utilizada - checagem agora usa N1_BAIXA, nao depende mais do tipo de operacao.
+            // If ValType(oCab) == "O"
+            //     cTipoAtual := oCab:GetValue("Z6_TIPOOP")
+            // EndIf
+
+            // Checagem de N1_BAIXA movida para cima, direto no registro encontrado pela Chapa digitada -
+            // aDados[4] (item vindo da SN3) nao e confiavel para re-buscar a SN1, ver conversa sobre o assunto.
+            // DbSelectArea("SN1")
+            // SN1->(DbSetOrder(1))
+            // If SN1->(DbSeek(xFilial("SN1") + aDados[1] + aDados[4]))
+            //     If !Empty(SN1->N1_BAIXA)
+            //         MsgAlert("Bem ja baixado ou transferido, nao pode ser usado.", "Atencao")
+            //         Return .F.
+            //     EndIf
+            // EndIf
+
             If oGrid:GetStruct():HasField("Z6_CBASE")
                 oGrid:LoadValue("Z6_CBASE", aDados[1])
+            EndIf
+            If oGrid:GetStruct():HasField("Z6_ITEM")
+                oGrid:LoadValue("Z6_ITEM", cItemBem)
             EndIf
             If oGrid:GetStruct():HasField("Z6_DESCRI")
                 oGrid:LoadValue("Z6_DESCRI", aDados[3])
@@ -638,7 +696,11 @@ User Function ATFT0211()
             If oGrid:GetStruct():HasField("Z6_CCORIG")
                 oGrid:LoadValue("Z6_CCORIG", aDados[7])
             EndIf
-            
+
+            // Filial/CC de Destino vem pre-preenchido igual a origem (usuario pode manter ou trocar - ver regra em ATFT0210).
+            If oGrid:GetStruct():HasField("Z6_FILDES")
+                oGrid:LoadValue("Z6_FILDES", aDados[9])
+            EndIf
             If oGrid:GetStruct():HasField("Z6_CCDEST")
                 oGrid:LoadValue("Z6_CCDEST", aDados[7])
             EndIf
@@ -749,13 +811,13 @@ User Function ATFT0212()
 
         // 2) Alerta (nao bloqueia) se a data do sistema nao estiver no mes imediatamente posterior ao MV_ULTDEPR
         If ATF_MESANO(dDataBase) != (ATF_MESANO(dUltDepr) + 1)
-            MsgAlert("Atencao: a data do sistema (" + DToS(dDataBase) + ") nao esta no mes imediatamente posterior ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToS(dUltDepr) + ").", "Atencao - Data do Sistema")
+            MsgAlert("Atencao: a data do sistema (" + DToC(dDataBase) + ") nao esta no mes imediatamente posterior ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToC(dUltDepr) + ").", "Atencao - Data do Sistema")
         EndIf
 
         // 3) Se a data do lote nao estiver no mes imediatamente posterior ao MV_ULTDEPR, avisa que sera usada a data do sistema
         If ATF_MESANO(dDataInc) != (ATF_MESANO(dUltDepr) + 1)
-            cMsg := "A data deste lote (" + DToS(dDataInc) + ") nao esta no mes imediatamente posterior ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToS(dUltDepr) + ")." + CRLF + ;
-                    "O processamento sera realizado na data do sistema (" + DToS(dDataBase) + ")." + CRLF + "Deseja continuar?"
+            cMsg := "A data deste lote (" + DToC(dDataInc) + ") nao esta no mes imediatamente posterior ao ultimo mes de depreciacao processado (MV_ULTDEPR: " + DToC(dUltDepr) + ")." + CRLF + ;
+                    "O processamento sera realizado na data do sistema (" + DToC(dDataBase) + ")." + CRLF + "Deseja continuar?"
 
             If !MsgYesNo(cMsg, "Atencao - Data do Lote")
                 FWRestArea(aArea)
@@ -810,8 +872,11 @@ User Function ATFT0214(aLog)
         AAdd(aBrowse, "Nenhum processamento foi realizado.")
     Else
         For nX := 1 To Len(aLog)
-            If ValType(aLog[nX]) == "A" .And. Len(aLog[nX]) >= 3
-                cLinha := PadR("Bem: " + AllTrim(aLog[nX][1]), 25) + " | " + aLog[nX][2]
+            If ValType(aLog[nX]) == "A" .And. Len(aLog[nX]) >= 5
+                cLinha := PadR("Bem: " + AllTrim(aLog[nX][1]), 15) + " | " + ;
+                          PadR("Item: " + AllTrim(aLog[nX][2]), 12) + " | " + ;
+                          PadR("Plaqueta: " + AllTrim(aLog[nX][3]), 15) + " | " + ;
+                          aLog[nX][4]
                 AAdd(aBrowse, cLinha)
             Else
                 AAdd(aBrowse, "Item de log em formato invalido.")
@@ -1015,13 +1080,13 @@ Method ProcLote(cNroLote, cTipoOp, dDataInc, dDataProc, aLog) Class ATFGER02
                 SZ6->(DbSetOrder(3))
                 SZ6->(DbGoto(nRecBase))
             Else
-                AAdd(aLog, {AllTrim(SZ6->Z6_CBASE), "Item ja estava processado/transferido, foi ignorado.", "I"})
+                AAdd(aLog, {AllTrim(SZ6->Z6_CBASE), If(SZ6->(FieldPos("Z6_ITEM")) > 0, AllTrim(SZ6->Z6_ITEM), ""), AllTrim(SZ6->Z6_CHAPA), "Item ja estava processado/transferido, foi ignorado.", "I"})
             EndIf
-            
+
             SZ6->(DbSkip())
         EndDo
     Else
-        AAdd(aLog, {" ", "Lote nao encontrado. Chave: " + cChave3, "E"})
+        AAdd(aLog, {" ", "", "", "Lote nao encontrado. Chave: " + cChave3, "E"})
     EndIf
     
     FWRestArea(aArea)
@@ -1038,6 +1103,7 @@ User Function ATFT0215(nRec, dDataProc, aLog)
     Local aCab
     Local aItem
     Local cCBase
+    Local cChapa
     Local cMotivo
     Local dBaixa
     Local nPerbai
@@ -1082,6 +1148,7 @@ User Function ATFT0215(nRec, dDataProc, aLog)
     SZ6->(DbGoto(nRec))
     
     cCBase  := PadR(AllTrim(SZ6->Z6_CBASE), TamSX3("N1_CBASE")[1])
+    cChapa  := AllTrim(SZ6->Z6_CHAPA)
     cMotivo := PadR(AllTrim(SZ6->Z6_MOTIVO), TamSX3("FN6_MOTIVO")[1])
     dBaixa  := SZ6->Z6_BAIXA
     nPerbai := SZ6->Z6_PERBAI
@@ -1101,18 +1168,31 @@ User Function ATFT0215(nRec, dDataProc, aLog)
     
     DbSelectArea("SN1")
     SN1->(DbSetOrder(1))
-    If SN1->(DbSeek(cFilAux + cCBase))
-        While !SN1->(Eof()) .And. SN1->N1_FILIAL == cFilAux .And. SN1->N1_CBASE == cCBase
-            If Empty(SN1->N1_BAIXA)
-                cItemBem := SN1->N1_ITEM
-                Exit
+
+    If SZ6->(FieldPos("Z6_ITEM")) > 0
+        cItemBem := PadR(AllTrim(SZ6->Z6_ITEM), TamSX3("N1_ITEM")[1])
+        If !Empty(cItemBem)
+            If !SN1->(DbSeek(cFilAux + cCBase + cItemBem)) .Or. !Empty(SN1->N1_BAIXA)
+                cItemBem := ""
             EndIf
-            SN1->(DbSkip())
-        EndDo
+        EndIf
     EndIf
-    
+
     If Empty(cItemBem)
-        AAdd(aLog, {cCBase, "Status: Bem nao encontrado na SN1 ou ja esta totalmente baixado", "E"})
+        // Fallback - Z6_ITEM vazio (linha anterior a criacao do campo) ou item ja baixado - varre a SN1 procurando linha pendente.
+        If SN1->(DbSeek(cFilAux + cCBase))
+            While !SN1->(Eof()) .And. SN1->N1_FILIAL == cFilAux .And. SN1->N1_CBASE == cCBase
+                If Empty(SN1->N1_BAIXA)
+                    cItemBem := SN1->N1_ITEM
+                    Exit
+                EndIf
+                SN1->(DbSkip())
+            EndDo
+        EndIf
+    EndIf
+
+    If Empty(cItemBem)
+        AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Bem nao encontrado ou ja esta totalmente baixado", "E"})
         FWRestArea(aArea)
         Return lRet
     EndIf
@@ -1145,7 +1225,7 @@ User Function ATFT0215(nRec, dDataProc, aLog)
     EndIf
     
     If !lFound .Or. Len(aItem) == 0
-        AAdd(aLog, {cCBase, "Status: Saldos (Tipos) nao encontrados na SN3 para a Baixa", "E"})
+        AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Bem sem saldo disponivel para Baixa", "E"})
         FWRestArea(aArea)
         Return lRet
     EndIf
@@ -1209,7 +1289,7 @@ User Function ATFT0215(nRec, dDataProc, aLog)
                             
                             cLinhaErro := AllTrim(cLinhaErro)
                             If !Empty(cLinhaErro) .And. !("---" $ cLinhaErro)
-                                AAdd(aLog, {cCBase, "Status: Falha na Baixa - " + cLinhaErro, "E"})
+                                AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Falha na Baixa - " + cLinhaErro, "E"})
                             EndIf
                         EndDo
                     EndIf
@@ -1217,7 +1297,7 @@ User Function ATFT0215(nRec, dDataProc, aLog)
             EndIf
             
             If Len(aLog) == 0 .Or. aLog[Len(aLog)][3] != "E"
-                AAdd(aLog, {cCBase, "Status: Falha na Baixa (Erro n�o detalhado pelo ExecAuto)", "E"})
+                AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Falha na Baixa (Erro n�o detalhado pelo ExecAuto)", "E"})
             EndIf
             
             DbSelectArea("SZ6")
@@ -1226,7 +1306,7 @@ User Function ATFT0215(nRec, dDataProc, aLog)
             SZ6->(MsUnLock())
         Else
             lRet := .T.
-            AAdd(aLog, {cCBase, "Status: Baixa registrada com sucesso", "C"})
+            AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Baixa registrada com sucesso", "C"})
             
             DbSelectArea("SZ6")
             SZ6->(RecLock("SZ6", .F.))
@@ -1253,9 +1333,9 @@ User Function ATFT0215(nRec, dDataProc, aLog)
         EndIf
         
         If ValType(oErr) == "O"
-            AAdd(aLog, {cCBase, "Status: EXCECAO Baixa - " + oErr:Description, "E"})
+            AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: EXCECAO Baixa - " + oErr:Description, "E"})
         Else
-            AAdd(aLog, {cCBase, "Status: EXCECAO desconhecida na Baixa", "E"})
+            AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: EXCECAO desconhecida na Baixa", "E"})
         EndIf
     End Sequence
     
@@ -1275,10 +1355,11 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     Local cCCOri
     Local cCCDes
     Local cFilDes
+    Local cItemBem
     // Local cNroLote // Nao utilizada - so alimentava linha de regravacao ja comentada.
     Local dDataInc
     // Local cTipoOp  // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // Local cChapa   // Nao utilizada - so alimentava linha de regravacao ja comentada.
+    Local cChapa
     // Local cDescri  // Nao utilizada - so alimentava linha de regravacao ja comentada.
     // Local cMotivo  // Nao utilizada - so alimentava linha de regravacao ja comentada.
     // Local dBaixa   // Nao utilizada - so alimentava linha de regravacao ja comentada.
@@ -1326,7 +1407,7 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     // cNroLote := SZ6->Z6_NUMLOT // Nao utilizada - so alimentava linha de regravacao ja comentada.
     dDataInc := SZ6->Z6_DATAINC
     // cTipoOp  := SZ6->Z6_TIPOOP // Nao utilizada - so alimentava linha de regravacao ja comentada.
-    // cChapa   := SZ6->Z6_CHAPA  // Nao utilizada - so alimentava linha de regravacao ja comentada.
+    cChapa   := AllTrim(SZ6->Z6_CHAPA)
 
     // Sem data de processamento valida informada, mantem o comportamento original (usa a data do lote)
     If ValType(dDataProc) != "D" .Or. Empty(dDataProc)
@@ -1339,26 +1420,49 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     // cDeprec  := IF(SZ6->(FieldPos("Z6_DEPREC")) > 0, SZ6->Z6_DEPREC, "") // Nao utilizada - so alimentava linha de regravacao ja comentada.
     // nCusBem  := IF(SZ6->(FieldPos("Z6_CUSTBEM")) > 0, SZ6->Z6_CUSTBEM, 0) // Nao utilizada - so alimentava linha de regravacao ja comentada.
     
+    cItemBem := ""
+    If SZ6->(FieldPos("Z6_ITEM")) > 0
+        cItemBem := AllTrim(SZ6->Z6_ITEM)
+    EndIf
+
     If Empty(cCBase) .Or. Empty(cCCOri) .Or. Empty(cCCDes)
-        AAdd(aLog, {cCBase, "Status: Dados obrigatorios (CBASE/CC origem/CC destino) vazios", "E"})
+        AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Dados obrigatorios (CBASE/CC origem/CC destino) vazios", "E"})
         FWRestArea(aArea)
         Return lRet
     EndIf
-    
+
     DbSelectArea("SN3")
     SN3->(DbSetOrder(1))
-    If SN3->(DbSeek(cFilAux + PadR(cCBase, TamSX3("N3_CBASE")[1])))
-        While !SN3->(Eof()) .And. SN3->N3_FILIAL == cFilAux .And. AllTrim(SN3->N3_CBASE) == cCBase
-            If SN3->N3_BAIXA == "0"
-                lFound := .T.
-                Exit
-            EndIf
-            SN3->(DbSkip())
-        EndDo
+
+    If !Empty(cItemBem)
+        If SN3->(DbSeek(cFilAux + PadR(cCBase, TamSX3("N3_CBASE")[1]) + PadR(cItemBem, TamSX3("N3_ITEM")[1])))
+            While !SN3->(Eof()) .And. SN3->N3_FILIAL == cFilAux .And. AllTrim(SN3->N3_CBASE) == cCBase .And. AllTrim(SN3->N3_ITEM) == cItemBem
+                If SN3->N3_BAIXA == "0"
+                    lFound := .T.
+                    Exit
+                EndIf
+                SN3->(DbSkip())
+            EndDo
+        EndIf
     EndIf
-    
+
     If !lFound
-        AAdd(aLog, {cCBase, "Status: Bem ativo nao encontrado na SN3", "E"})
+        // Fallback - Z6_ITEM vazio (linha anterior a criacao do campo) ou nao localizado - pega a primeira balanca ativa do CBASE.
+        DbSelectArea("SN3")
+        SN3->(DbSetOrder(1))
+        If SN3->(DbSeek(cFilAux + PadR(cCBase, TamSX3("N3_CBASE")[1])))
+            While !SN3->(Eof()) .And. SN3->N3_FILIAL == cFilAux .And. AllTrim(SN3->N3_CBASE) == cCBase
+                If SN3->N3_BAIXA == "0"
+                    lFound := .T.
+                    Exit
+                EndIf
+                SN3->(DbSkip())
+            EndDo
+        EndIf
+    EndIf
+
+    If !lFound
+        AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Bem ativo nao encontrado.", "E"})
         FWRestArea(aArea)
         Return lRet
     EndIf
@@ -1366,7 +1470,7 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     DbSelectArea("SN1")
     SN1->(DbSetOrder(1))
     If !SN1->(DbSeek(cFilAux + SN3->N3_CBASE + SN3->N3_ITEM))
-        AAdd(aLog, {cCBase, "Status: Bem nao encontrado na SN1", "E"})
+        AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Bem nao encontrado", "E"})
         FWRestArea(aArea)
         Return lRet
     EndIf
@@ -1394,11 +1498,9 @@ User Function ATFT0216(nRec, dDataProc, aLog)
     AAdd(aDadosAuto, {"N3_CDEPREC", SN3->N3_CDEPREC, Nil})
     AAdd(aDadosAuto, {"N3_CCDEPR" , SN3->N3_CCDEPR , Nil})
     AAdd(aDadosAuto, {"N3_CDESP"  , SN3->N3_CDESP  , Nil})
-    AAdd(aDadosAuto, {"N3_CUSTBEM", SN3->N3_CUSTBEM, Nil})
-    AAdd(aDadosAuto, {"N3_CCCORR" , SN3->N3_CCCORR , Nil})
-    AAdd(aDadosAuto, {"N3_CCDESP" , SN3->N3_CCDESP , Nil})
-    AAdd(aDadosAuto, {"N3_CCCDEP" , SN3->N3_CCCDEP , Nil})
-    AAdd(aDadosAuto, {"N3_CCCDES" , SN3->N3_CCCDES , Nil})
+    AAdd(aDadosAuto, {"N3_CUSTBEM", PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
+    AAdd(aDadosAuto, {"N3_CCDESP" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]), Nil})
+    AAdd(aDadosAuto, {"N3_CCCDEP" , PadR(cCCDes, TamSX3("N3_CCUSTO")[1]) , Nil})
 
     AAdd(aParamAuto, {"MV_PAR01", 1}) 
     AAdd(aParamAuto, {"MV_PAR02", 2}) 
@@ -1442,7 +1544,7 @@ User Function ATFT0216(nRec, dDataProc, aLog)
                             
                             cLinhaErro := AllTrim(cLinhaErro)
                             If !Empty(cLinhaErro) .And. !("---" $ cLinhaErro)
-                                AAdd(aLog, {cCBase, "Status: Falha na Transferencia - " + cLinhaErro, "E"})
+                                AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Falha na Transferencia - " + cLinhaErro, "E"})
                             EndIf
                         EndDo
                     EndIf
@@ -1450,7 +1552,7 @@ User Function ATFT0216(nRec, dDataProc, aLog)
             EndIf
             
             If Len(aLog) == 0 .Or. aLog[Len(aLog)][3] != "E"
-                AAdd(aLog, {cCBase, "Status: Falha na Transferencia (Inconsistencia estrutural da rotina)", "E"})
+                AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Falha na Transferencia (Inconsistencia estrutural da rotina)", "E"})
             EndIf
             
             DbSelectArea("SZ6")
@@ -1461,7 +1563,7 @@ User Function ATFT0216(nRec, dDataProc, aLog)
             
         Else
             lRet := .T.
-            AAdd(aLog, {cCBase, "Status: Transferencia realizada com sucesso", "C"})
+            AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: Transferencia realizada com sucesso", "C"})
             
             DbSelectArea("SZ6")
             SZ6->(DbGoto(nRec))
@@ -1496,15 +1598,15 @@ User Function ATFT0216(nRec, dDataProc, aLog)
             //SZ6->Z6_STATUS  := "DEST"
             SZ6->(MsUnLock())
 
-            DbSelectArea("SN1")
-            If SN1->(DbSeek(cFilAux + SN3->N3_CBASE + SN3->N3_ITEM))
-                RecLock("SN1", .F.)
-                SN1->N1_STATUS := '4'
-                SN1->(MsUnLock())
-            EndIf
+            // DbSelectArea("SN1") // Nao deve gravar manualmente em SN1 apos o ATFA060 - o ExecAuto ja deve fazer tudo que for necessario.
+            // If SN1->(DbSeek(cFilAux + SN3->N3_CBASE + SN3->N3_ITEM))
+            //     RecLock("SN1", .F.)
+            //     SN1->N1_STATUS := '4'
+            //     SN1->(MsUnLock())
+            // EndIf
             
-            If cFilDes <> cFilAux
-                cFilAnt := cFilDes
+//            If cFilDes <> cFilAux
+//                cFilAnt := cFilDes
                 
                 /*DbSelectArea("SN1")
                 If !SN1->(DbSeek(xFilial("SN1") + aSN1[SN1->(FieldPos("N1_CBASE"))] + aSN1[SN1->(FieldPos("N1_ITEM"))]))
@@ -1556,22 +1658,22 @@ User Function ATFT0216(nRec, dDataProc, aLog)
                 //If SZ6->(FieldPos("Z6_CUSTBEM")) > 0
                     // SZ6->Z6_CUSTBEM := nCusBem // Nao deve regravar dados digitados pelo usuario.
                 //EndIf
-                If SZ6->(FieldPos("Z6_DTPROC")) > 0
-                    SZ6->Z6_DTPROC := dDataProc
-                EndIf
+//                If SZ6->(FieldPos("Z6_DTPROC")) > 0
+//                    SZ6->Z6_DTPROC := dDataProc
+//                EndIf
 
-                SZ6->Z6_STATUS  := "DEST" 
-                SZ6->(MsUnLock())
+//                SZ6->Z6_STATUS  := "DEST" 
+//                SZ6->(MsUnLock())
                 
-                cFilAnt := cFilBkp
-            EndIf
+//                cFilAnt := cFilBkp
+//            EndIf
         EndIf
         
     Recover Using oErr
         If ValType(oErr) == "O"
-            AAdd(aLog, {cCBase, "Status: EXCECAO Transf - " + oErr:Description, "E"})
+            AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: EXCECAO Transf - " + oErr:Description, "E"})
         Else
-            AAdd(aLog, {cCBase, "Status: EXCECAO desconhecida na Transf", "E"})
+            AAdd(aLog, {cCBase, cItemBem, cChapa, "Status: EXCECAO desconhecida na Transf", "E"})
         EndIf
     End Sequence
     
